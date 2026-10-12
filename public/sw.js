@@ -1,5 +1,5 @@
-/* Bump the version whenever the app shell changes. API data lives in SQLite and the device cache. */
-const CACHE = "bookit-shell-v7";
+/* Bump the version whenever the app shell changes. Device data lives in IndexedDB. */
+const CACHE = "bookit-shell-v9";
 const SHELL = [
   "/",
   "/manifest.webmanifest",
@@ -80,6 +80,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
+          if (!response.ok) return caches.match("/").then((cached) => cached || response);
           if (response.ok) {
             const copy = response.clone();
             event.waitUntil(caches.open(CACHE).then((cache) => cache.put("/", copy)));

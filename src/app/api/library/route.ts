@@ -30,8 +30,8 @@ export async function PUT(request: Request) {
   }
   try {
     const raw = await request.text();
-    if (raw.length > 5_000_000)
-      return Response.json({ error: "Library exceeds the 5 MB local storage limit." }, { status: 413 });
+    if (new TextEncoder().encode(raw).byteLength > 5_000_000)
+      return Response.json({ error: "Library exceeds the 5 MB library limit." }, { status: 413 });
     const result = syncSchema.safeParse(JSON.parse(raw));
     if (!result.success)
       return Response.json({ error: "The library contains invalid data." }, { status: 400 });
@@ -46,9 +46,6 @@ export async function PUT(request: Request) {
       );
     if (error instanceof SyntaxError)
       return Response.json({ error: "Invalid JSON." }, { status: 400 });
-    return Response.json(
-      { error: "The local SQLite database is unavailable." },
-      { status: 500 },
-    );
+    return Response.json({ error: "The local SQLite database is unavailable." }, { status: 500 });
   }
 }

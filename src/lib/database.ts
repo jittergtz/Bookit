@@ -15,6 +15,7 @@ export function openDatabase(path: string) {
   const db = new DatabaseSync(path);
   db.exec(`
     PRAGMA journal_mode = WAL;
+    PRAGMA synchronous = FULL;
     PRAGMA foreign_keys = ON;
     PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value INTEGER NOT NULL) STRICT;
@@ -30,7 +31,7 @@ export function openDatabase(path: string) {
     CREATE INDEX IF NOT EXISTS pages_book_idx ON pages(book_id, position);
   `);
 
-  function read(): Snapshot {
+  function readSnapshot(): Snapshot {
     const collections = db.prepare("SELECT id, name FROM collections ORDER BY position").all();
     const pageRows = db.prepare("SELECT book_id, properties FROM pages ORDER BY position").all();
     const books = db
@@ -50,6 +51,19 @@ export function openDatabase(path: string) {
     return { revision, library: librarySchema.parse({ collections, books }) };
   }
 
+  function read(): Snapshot {
+    // All tables and the revision must describe the same committed library.
+    db.exec("BEGIN");
+    try {
+      const snapshot = readSnapshot();
+      db.exec("COMMIT");
+      return snapshot;
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   function write(library: Library, expectedRevision: number): Snapshot {
     const validated = librarySchema.parse(library);
     db.exec("BEGIN IMMEDIATE");
@@ -57,7 +71,7 @@ export function openDatabase(path: string) {
       const current = Number(
         db.prepare("SELECT value FROM metadata WHERE key = 'revision'").get()?.value ?? 0,
       );
-      if (current !== expectedRevision) throw new RevisionConflict(read());
+      if (current !== expectedRevision) throw new RevisionConflict(readSnapshot());
       db.exec("DELETE FROM pages; DELETE FROM books; DELETE FROM collections;");
       const insertCollection = db.prepare(
         "INSERT INTO collections (id, position, name) VALUES (?, ?, ?)",

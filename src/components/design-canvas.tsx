@@ -9,6 +9,7 @@ import {
   Copy,
   ImagePlus,
   Italic,
+  Maximize2,
   Redo2,
   Smile,
   Trash2,
@@ -19,6 +20,20 @@ import {
 import { designFonts, newDesignElement, newId, type DesignElement } from "@/lib/model";
 
 export type CanvasValues = { title?: string; subtitle?: string };
+type DragPreview = { id: string; x: number; y: number; width: number; mode: "move" | "resize" };
+type ElementGesture = {
+  id: string;
+  mode: "move" | "resize";
+  clientX: number;
+  clientY: number;
+  x: number;
+  y: number;
+  width: number;
+  halfWidth: number;
+  halfHeight: number;
+  moved: boolean;
+};
+
 export function elementText(item: DesignElement, values: CanvasValues = {}) {
   return item.source === "custom" ? item.text : values[item.source] || "";
 }
@@ -41,18 +56,10 @@ export function DesignCanvas({
   children?: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{
-    id: string;
-    clientX: number;
-    clientY: number;
-    x: number;
-    y: number;
-    halfWidth: number;
-    halfHeight: number;
-    moved: boolean;
-  } | null>(null);
-  const [drag, setDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const gesture = useRef<ElementGesture | null>(null);
+  const [drag, setDrag] = useState<DragPreview | null>(null);
   const editable = !!onChange;
+  const showingGuides = drag?.mode === "move";
   const position = (x: number, y: number, halfWidth: number, halfHeight: number) => ({
     x: Math.max(halfWidth, Math.min(100 - halfWidth, Math.abs(x - 50) < 1.2 ? 50 : x)),
     y: Math.max(halfHeight, Math.min(100 - halfHeight, Math.abs(y - 50) < 1.2 ? 50 : y)),
@@ -68,8 +75,8 @@ export function DesignCanvas({
       }}
     >
       {children}
-      {drag && Math.abs(drag.x - 50) < 0.1 && <span className="canvas-guide guide-x" />}
-      {drag && Math.abs(drag.y - 50) < 0.1 && <span className="canvas-guide guide-y" />}
+      {showingGuides && Math.abs(drag.x - 50) < 0.1 && <span className="canvas-guide guide-x" />}
+      {showingGuides && Math.abs(drag.y - 50) < 0.1 && <span className="canvas-guide guide-y" />}
       {elements.map((item, index) => {
         const text = elementText(item, values);
         const active = selectedId === item.id;
@@ -77,7 +84,7 @@ export function DesignCanvas({
         const style: CSSProperties = {
           left: `${current.x}%`,
           top: `${current.y}%`,
-          width: `${item.width}%`,
+          width: `${current.width}%`,
           fontSize: `${item.fontSize / 3}cqw`,
           color: item.color,
           fontWeight: item.bold ? 700 : 400,
@@ -86,16 +93,25 @@ export function DesignCanvas({
           textAlign: item.align,
           transform: `translate(-50%, -50%) rotate(${item.rotation}deg)`,
         };
-        const label = `${item.kind === "image" ? "Image" : item.kind === "sticker" ? "Sticker" : item.source === "title" ? "Title" : item.source === "subtitle" ? "Subtitle" : "Text"} layer ${index + 1}`;
+        const layerName =
+          item.kind === "image"
+            ? "Photo"
+            : item.kind === "sticker"
+              ? "Sticker"
+              : item.source === "title"
+                ? "Title"
+                : item.source === "subtitle"
+                  ? "Subtitle"
+                  : "Text";
+        const label = `${layerName} layer ${index + 1}`;
         return (
           <div
             key={item.id}
             className={`design-element font-${item.font} ${active ? "is-selected" : ""} element-${item.kind}`}
             style={style}
-            role={editable ? "button" : undefined}
+            role={editable ? "group" : undefined}
             tabIndex={editable ? 0 : undefined}
             aria-label={editable ? label : undefined}
-            aria-pressed={editable ? active : undefined}
             onClick={(event) => {
               if (editable) {
                 event.stopPropagation();
@@ -104,6 +120,7 @@ export function DesignCanvas({
             }}
             onPointerDown={(event) => {
               if (!editable || event.button !== 0) return;
+              if ((event.target as HTMLElement).closest("[data-image-resize]")) return;
               event.preventDefault();
               event.stopPropagation();
               event.currentTarget.focus({ preventScroll: true });
@@ -112,10 +129,12 @@ export function DesignCanvas({
               const box = event.currentTarget.getBoundingClientRect();
               gesture.current = {
                 id: item.id,
+                mode: "move",
                 clientX: event.clientX,
                 clientY: event.clientY,
                 x: item.x,
                 y: item.y,
+                width: item.width,
                 halfWidth: Math.min(47.5, (box.width / canvas.width) * 50),
                 halfHeight: Math.min(47.5, (box.height / canvas.height) * 50),
                 moved: false,
@@ -129,9 +148,25 @@ export function DesignCanvas({
               const dx = event.clientX - start.clientX,
                 dy = event.clientY - start.clientY;
               if (Math.abs(dx) + Math.abs(dy) > 3) start.moved = true;
-              if (start.moved)
+              if (start.moved && start.mode === "resize") {
+                const width = Math.max(10, Math.min(95, start.width + (dx / canvas.width) * 100));
+                const bounds = position(
+                  start.x,
+                  start.y,
+                  Math.min(47.5, width / 2),
+                  Math.min(47.5, start.halfHeight * (width / start.width)),
+                );
                 setDrag({
                   id: item.id,
+                  mode: start.mode,
+                  ...bounds,
+                  width,
+                });
+              } else if (start.moved)
+                setDrag({
+                  id: item.id,
+                  mode: start.mode,
+                  width: start.width,
                   ...position(
                     start.x + (dx / canvas.width) * 100,
                     start.y + (dy / canvas.height) * 100,
@@ -146,7 +181,11 @@ export function DesignCanvas({
               if (start.moved && drag)
                 onChange?.(
                   elements.map((layer) =>
-                    layer.id === item.id ? { ...layer, x: drag.x, y: drag.y } : layer,
+                    layer.id === item.id
+                      ? start.mode === "resize"
+                        ? { ...layer, width: drag.width, x: drag.x, y: drag.y }
+                        : { ...layer, x: drag.x, y: drag.y }
+                      : layer,
                   ),
                 );
               gesture.current = null;
@@ -182,8 +221,73 @@ export function DesignCanvas({
               }
             }}
           >
-            {item.kind === "image" /* eslint-disable-next-line @next/next/no-img-element */ ? (
-              <img src={item.image} alt="Custom sticker" draggable={false} />
+            {item.kind === "image" ? (
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.image} alt="Photo on page" draggable={false} />
+                {editable && active && (
+                  <span
+                    className="image-resize-handle"
+                    data-image-resize
+                    role="slider"
+                    tabIndex={0}
+                    aria-label="Resize photo"
+                    aria-valuemin={10}
+                    aria-valuemax={95}
+                    aria-valuenow={Math.round(current.width)}
+                    aria-valuetext={`${Math.round(current.width)} percent of page width`}
+                    onPointerDown={(event) => {
+                      if (event.button !== 0) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.currentTarget.focus({ preventScroll: true });
+                      onSelect?.(item.id);
+                      const canvas = root.current!.getBoundingClientRect();
+                      gesture.current = {
+                        id: item.id,
+                        mode: "resize",
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                        x: item.x,
+                        y: item.y,
+                        width: item.width,
+                        halfWidth: Math.min(
+                          47.5,
+                          (event.currentTarget.parentElement!.getBoundingClientRect().width /
+                            canvas.width) *
+                            50,
+                        ),
+                        halfHeight: Math.min(
+                          47.5,
+                          (event.currentTarget.parentElement!.getBoundingClientRect().height /
+                            canvas.height) *
+                            50,
+                        ),
+                        moved: false,
+                      };
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                    }}
+                    onKeyDown={(event) => {
+                      if (!["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp"].includes(event.key))
+                        return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const step = event.shiftKey ? 5 : 1;
+                      const change =
+                        event.key === "ArrowLeft" || event.key === "ArrowDown" ? -step : step;
+                      onChange?.(
+                        elements.map((layer) =>
+                          layer.id === item.id
+                            ? { ...layer, width: Math.max(10, Math.min(95, layer.width + change)) }
+                            : layer,
+                        ),
+                      );
+                    }}
+                  >
+                    <Maximize2 size={14} aria-hidden="true" />
+                  </span>
+                )}
+              </>
             ) : (
               text ||
               (editable ? (
@@ -317,7 +421,7 @@ export function CanvasEditor({
       bitmap.close();
       const image = canvas.toDataURL("image/webp", 0.8);
       if (image.length > 300_000)
-        throw new Error("This image is too detailed. Try a smaller sticker.");
+        throw new Error("This photo is too detailed. Try a smaller image.");
       add({ kind: "image", image, width: 35, text: "" });
       setError("");
     } catch (cause) {
@@ -329,7 +433,8 @@ export function CanvasEditor({
     <div className="canvas-editor">
       {renderCanvas({ selectedId, onSelect: setSelectedId, onChange: commit })}
       <p className="canvas-hint">
-        Tap a layer to edit. Drag to move. Center guides snap into place.
+        Tap a layer to edit. Drag to move it, or drag the photo corner to resize. Center guides help
+        align.
       </p>
       <div className="canvas-toolbar" aria-label="Canvas tools">
         <button type="button" onClick={() => add({ text: "" })} disabled={elements.length >= 30}>
@@ -350,7 +455,7 @@ export function CanvasEditor({
           disabled={elements.length >= 30}
         >
           <ImagePlus size={17} />
-          Upload
+          Add photo
         </button>
         <button
           type="button"
@@ -381,7 +486,7 @@ export function CanvasEditor({
         type="file"
         accept="image/png,image/jpeg,image/webp"
         className="visually-hidden"
-        aria-label="Upload a sticker image"
+        aria-label="Add a photo or image"
         onChange={(event) => void upload(event.target.files?.[0])}
       />
       {error && (
@@ -454,7 +559,7 @@ export function CanvasEditor({
               onClick={() => setSelectedId(item.id)}
             >
               {item.kind === "image"
-                ? "Image"
+                ? "Photo"
                 : item.kind === "sticker"
                   ? item.text
                   : item.source === "title"
@@ -473,7 +578,7 @@ export function CanvasEditor({
               {selected.kind === "text"
                 ? "Text style"
                 : selected.kind === "image"
-                  ? "Image sticker"
+                  ? "Photo"
                   : "Sticker style"}
             </strong>
             <div>

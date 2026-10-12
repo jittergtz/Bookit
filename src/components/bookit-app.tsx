@@ -22,15 +22,16 @@ import {
   X,
 } from "lucide-react";
 import {
-  librarySchema,
   newId,
   pageText,
   relativeDate,
   wordCount,
   type Book,
   type Collection,
+  type Library,
 } from "@/lib/model";
 import { downloadLibrary, useLibrary } from "@/lib/use-library";
+import { MAX_BACKUP_FILE_BYTES, parseLibraryBackup } from "@/lib/library-backup";
 import { BookForm } from "./book-form";
 import { BookReader } from "./book-reader";
 import { BookCover, EmptyState, Sheet } from "./ui";
@@ -56,9 +57,7 @@ export function BookitApp() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [notice, setNotice] = useState("");
   const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [pendingImport, setPendingImport] = useState<ReturnType<typeof librarySchema.parse> | null>(
-    null,
-  );
+  const [pendingImport, setPendingImport] = useState<Library | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
 
@@ -204,12 +203,13 @@ export function BookitApp() {
   const importFile = async (file?: File) => {
     if (!file) return;
     try {
-      if (file.size > 5_000_000) throw new Error("Backup exceeds the 5 MB library limit.");
-      const parsed = JSON.parse(await file.text());
-      setPendingImport(librarySchema.parse(parsed.library ?? parsed));
+      if (file.size > MAX_BACKUP_FILE_BYTES) throw new Error("Backup file is too large.");
+      setPendingImport(parseLibraryBackup(await file.text()));
       setPanel("import");
     } catch {
-      setNotice("This file isn’t a valid Bookit backup. Choose an exported .json file under 5 MB.");
+      setNotice(
+        "This file isn’t a valid Bookit backup. Choose an exported .json file containing a library under 5 MB.",
+      );
     }
     if (fileInput.current) fileInput.current.value = "";
   };
@@ -770,21 +770,21 @@ export function BookitApp() {
           >
             <div className="sheet-content">
               <p className="body-copy">
-                There are two versions of your library. Choose the version to keep. A backup of the
-                other version will download first.
+                Another tab or a recovered edit has a different version of your device library.
+                Choose the version to keep. A backup of the other version will download first.
               </p>
               <div className="conflict-choices">
                 <button className="primary-button" onClick={() => resolveConflict("device")}>
-                  Keep this device’s library
+                  Keep this tab’s changes
                 </button>
                 <button
                   className="secondary-button"
                   onClick={() => {
-                    resolveConflict("server");
+                    resolveConflict("saved");
                     closeBook();
                   }}
                 >
-                  Use the other library
+                  Use the stored library
                 </button>
               </div>
             </div>

@@ -22,7 +22,8 @@
   --accent: #171717;
   --line: #e5e5e5;
   --line-strong: #d4d4d4;
-  --ambient-light: radial-gradient(ellipse 74% 42% at 0% 8%, rgba(182, 192, 186, 0.58), transparent 74%),
+  --ambient-light:
+    radial-gradient(ellipse 74% 42% at 0% 8%, rgba(182, 192, 186, 0.58), transparent 74%),
     radial-gradient(ellipse 64% 46% at 100% 31%, rgb(244 226 203 / 62%), transparent 72%),
     radial-gradient(ellipse 82% 48% at 32% 100%, rgb(222 220 241 / 48%), transparent 72%);
   --serif: "Lora Variable", Georgia, serif;
@@ -42,7 +43,8 @@
   --accent: #f3f3f3;
   --line: #323232;
   --line-strong: #464646;
-  --ambient-light: radial-gradient(ellipse 74% 42% at 0% 8%, rgba(55, 58, 57, 0.48), transparent 74%),
+  --ambient-light:
+    radial-gradient(ellipse 74% 42% at 0% 8%, rgba(55, 58, 57, 0.48), transparent 74%),
     radial-gradient(ellipse 64% 46% at 100% 31%, rgba(68, 55, 44, 0.34), transparent 72%),
     radial-gradient(ellipse 82% 48% at 32% 100%, rgba(45, 44, 59, 0.4), transparent 72%);
 }
@@ -1276,21 +1278,15 @@ textarea::placeholder {
   transition: width 0.3s;
   opacity: 0.7;
 }
-.reader-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 23px 11px;
-}
 .reader-paper-wrap {
-  padding: 0 15px;
+  padding: 6px;
   touch-action: pan-y;
 }
 .reader-paper {
   position: relative;
-  min-height: calc(100dvh - 260px);
+  min-height: calc(100dvh - 200px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   border-radius: 3px 9px 9px 3px;
-  padding: 25px 25px 16px 29px;
+  padding: 16px 16px 12px 20px;
   box-shadow:
     0 2px 2px #17171710,
     3px 4px 12px #1717170c;
@@ -1403,7 +1399,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px 7px;
+  padding: 6px 12px;
 }
 .reader-tools > span {
   font-family: var(--serif);
@@ -1425,6 +1421,12 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+@media (max-width: 600px) and (display-mode: standalone) {
+  .bottom-nav,
+  .reader-navigation {
+    bottom: 20px;
+  }
 }
 .reader-navigation .icon-button {
   background: #ffffff59;
@@ -1623,6 +1625,28 @@ textarea::placeholder {
   max-height: 100%;
   object-fit: contain;
   pointer-events: none;
+}
+.image-resize-handle {
+  position: absolute;
+  z-index: 5;
+  right: 4px;
+  bottom: 4px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 80%);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 94%);
+  color: #171717;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
+  cursor: nwse-resize;
+  touch-action: none;
+  pointer-events: auto;
+}
+.image-resize-handle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 .element-sticker {
   line-height: 1.15;
@@ -1965,7 +1989,7 @@ textarea::placeholder {
 }
 .reader-paper.is-canvas {
   padding: 0;
-  height: max(430px, calc(100dvh - 260px));
+  height: max(430px, calc(100dvh - 200px - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
 }
 .reader-paper.is-canvas.paper-lined {
   background-image: repeating-linear-gradient(
@@ -1979,7 +2003,239 @@ textarea::placeholder {
   z-index: 2;
 }
 
+/* A softer, tactile control system for the book studio. */
+.book-form .field-label input,
+.book-form fieldset > input,
+.book-form select,
+.book-form .position-fields input,
+.book-form .layer-inspector textarea {
+  min-height: 50px;
+  padding: 0 17px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 38%), 0 2px 6px rgb(23 23 23 / 4%);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.book-form .layer-inspector textarea {
+  min-height: 82px;
+  padding: 14px 17px;
+  border-radius: 22px;
+}
+.book-form .field-label input:focus,
+.book-form fieldset > input:focus,
+.book-form select:focus,
+.book-form .position-fields input:focus,
+.book-form .layer-inspector textarea:focus {
+  border-color: color-mix(in srgb, var(--ink) 45%, var(--line));
+  outline: none;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.book-form .field-label input,
+.book-form .position-fields input {
+  margin-top: 8px;
+}
+.book-form .segmented {
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-muted) 78%, transparent);
+}
+.book-form .segmented button {
+  min-height: 43px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 550;
+  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.book-form .segmented button.active {
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(23 23 23 / 9%), inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent);
+}
+.book-form .preset-row button,
+.book-form .choice,
+.book-form .type-choice,
+.book-form .position-fields button,
+.book-form .format-buttons button,
+.book-form .canvas-toolbar > button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  transition: transform 0.18s ease, background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.book-form .preset-row button {
+  min-height: 38px;
+  padding: 8px 14px;
+  font-size: 11px;
+}
+.book-form .preset-row button:hover,
+.book-form .position-fields button:hover,
+.book-form .format-buttons button:hover,
+.book-form .canvas-toolbar > button:hover {
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.book-form .choice {
+  min-height: 45px;
+  padding: 10px 14px;
+  font-size: 11px;
+}
+.book-form .type-choice {
+  min-height: 82px;
+  justify-content: center;
+  padding: 12px;
+}
+.book-form .choice.selected,
+.book-form .type-choice.selected,
+.book-form .paper-option.selected {
+  border-color: color-mix(in srgb, var(--ink) 55%, var(--line));
+  background: var(--surface-muted);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.book-form .paper-option {
+  padding: 8px 7px 11px;
+  border-radius: 17px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(23 23 23 / 4%);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.book-form .paper-sample {
+  border-radius: 11px;
+}
+.book-form .studio-section {
+  overflow: hidden;
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  box-shadow: 0 3px 12px rgb(23 23 23 / 4%);
+}
+.book-form .studio-section summary {
+  min-height: 54px;
+  padding: 16px 18px;
+}
+.book-form .studio-settings {
+  padding: 7px 16px 18px;
+}
+.book-form .canvas-toolbar {
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+}
+.book-form .canvas-toolbar > button {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+.book-form .layer-inspector,
+.book-form .sticker-picker {
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--surface-muted) 76%, transparent);
+}
+.book-form .layer-list > button {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+.book-form .color-field > div {
+  min-height: 46px;
+  padding: 5px 12px 5px 7px;
+  border-radius: 999px;
+  box-shadow: 0 2px 7px rgb(23 23 23 / 4%);
+}
+.book-form .color-field input[type="color"] {
+  width: 32px;
+  height: 32px;
+}
+.book-form .position-fields button {
+  min-height: 43px;
+  width: auto;
+  padding: 8px 14px;
+}
+.book-form .format-buttons button {
+  min-width: 38px;
+  height: 38px;
+}
+.book-form .range-field input[type="range"] {
+  appearance: none;
+  height: 5px;
+  min-height: 5px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  accent-color: var(--ink);
+}
+.book-form .range-field input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border: 4px solid var(--surface);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 22%);
+}
+.book-form .range-field input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 4px solid var(--surface);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 22%);
+}
+.book-form .toggle-field input {
+  position: relative;
+  appearance: none;
+  width: 48px;
+  height: 29px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+  background-image: radial-gradient(circle, var(--surface) 0 9px, transparent 10px);
+  background-repeat: no-repeat;
+  background-position: 3px center;
+  background-size: 23px 23px;
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 12%);
+  cursor: pointer;
+  transition: background-color 0.2s ease, background-position 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.book-form .toggle-field input:checked {
+  background: var(--ink);
+  background-image: radial-gradient(circle, var(--surface) 0 9px, transparent 10px);
+  background-position: 22px center;
+}
+.book-form .toggle-field input:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  outline-offset: 2px;
+}
+.book-form .primary-button,
+.book-form .secondary-button,
+.book-form .danger-button {
+  min-height: 54px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 0.18s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.book-form .primary-button {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+.book-form .primary-button:active,
+.book-form .secondary-button:active,
+.book-form .preset-row button:active,
+.book-form .choice:active {
+  transform: scale(0.98);
+}
+
 @media (max-width: 360px) {
+  .book-form .canvas-toolbar {
+    gap: 2px;
+  }
+  .book-form .canvas-toolbar > button {
+    font-size: 10px;
+    gap: 4px;
+    padding: 7px 5px;
+  }
   .canvas-toolbar {
     gap: 2px;
   }

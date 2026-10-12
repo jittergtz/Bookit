@@ -68,4 +68,11 @@ test("API rejects cross-origin, malformed, and oversized writes", async () => {
     }),
   );
   assert.equal(oversized.status, 413);
+  const unicodeOversized = await PUT(
+    new Request("http://localhost:3007/api/library", {
+      method: "PUT",
+      body: `"${"é".repeat(2_500_000)}"`,
+    }),
+  );
+  assert.equal(unicodeOversized.status, 413);
 });

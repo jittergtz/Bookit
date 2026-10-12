@@ -17,11 +17,13 @@ test("PWA precaches the initial scripts and fonts and serves its shell offline",
   stores.set("another-app-cache", new Map());
   stores.set("bookit-shell-old", new Map());
   let offline = false;
+  let unavailable = false;
   const key = (value: string | { url: string }) =>
     new URL(typeof value === "string" ? value : value.url, origin).href;
   const network = async (request: string | { url: string }) => {
     if (offline) throw new Error("offline");
     const url = new URL(key(request));
+    if (unavailable && url.pathname === "/") return new Response("Unavailable", { status: 503 });
     if (url.pathname === "/")
       return new Response(
         '<html><link href="/_next/static/chunks/app.css" rel="stylesheet"><script src="/_next/static/chunks/app.js"></script><body>Bookit shell</body></html>',
@@ -84,6 +86,17 @@ test("PWA precaches the initial scripts and fonts and serves its shell offline",
   await Promise.all(pending);
   assert.equal(stores.has("bookit-shell-old"), false);
   assert.equal(stores.has("another-app-cache"), true);
+  unavailable = true;
+  let unavailableResponse: Promise<Response> | undefined;
+  handlers.get("fetch")!({
+    request: { method: "GET", url: `${origin}/`, mode: "navigate" },
+    waitUntil: (promise) => pending.push(promise),
+    respondWith: (promise) => {
+      unavailableResponse = promise;
+    },
+  });
+  assert.ok((await (await unavailableResponse)!.text()).includes("Bookit shell"));
+  unavailable = false;
   offline = true;
   let response: Promise<Response> | undefined;
   handlers.get("fetch")!({

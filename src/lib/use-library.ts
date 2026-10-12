@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { librarySchema, type Library, type Snapshot } from "./model";
-
-type Envelope = Snapshot & { dirty: boolean; generation: number };
-export type SaveStatus = "loading" | "saved" | "saving" | "offline" | "error" | "conflict";
-const STORAGE_KEY = "bookit-library-v1";
+import { syncSchema, type Library } from "./model";
+import { openDeviceDatabase } from "./device-database";
+import { DeviceLibrarySession, emptyDeviceState } from "./device-library";
+import { createLibraryBackup } from "./library-backup";
 
 export function downloadLibrary(library: Library) {
   const url = URL.createObjectURL(
-    new Blob(
-      [JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), library }, null, 2)],
-      { type: "application/json" },
-    ),
+    new Blob([createLibraryBackup(library)], { type: "application/json" }),
   );
   const link = document.createElement("a");
   link.href = url;
@@ -22,228 +18,81 @@ export function downloadLibrary(library: Library) {
 }
 
 export function useLibrary() {
-  const [library, setLibrary] = useState<Library>({ books: [], collections: [] });
-  const [ready, setReady] = useState(false);
-  const [status, setStatus] = useState<SaveStatus>("loading");
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState<Snapshot | null>(null);
-  const current = useRef<Envelope | null>(null);
-  const syncing = useRef(false);
-  const conflictRef = useRef<Snapshot | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const alive = useRef(true);
-
-  const persist = useCallback((envelope: Envelope) => {
-    current.current = envelope;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
-    } catch {
-      setError("Device storage is full. Export a backup and free space before adding more.");
-    }
-  }, []);
-
-  const sync = useCallback(
-    async (refresh = false) => {
-      const draft = current.current;
-      if (!draft || (!draft.dirty && !refresh) || syncing.current || conflictRef.current) return;
-      if (!navigator.onLine) {
-        setStatus("offline");
-        return;
-      }
-      syncing.current = true;
-      setStatus("saving");
-      try {
-        const response = await fetch(
-          "/api/library",
-          draft.dirty
-            ? {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                signal: AbortSignal.timeout(12_000),
-                body: JSON.stringify({ revision: draft.revision, library: draft.library }),
-              }
-            : { cache: "no-store", signal: AbortSignal.timeout(12_000) },
-        );
-        const data = await response.json();
-        if (!alive.current) return;
-        if (response.status === 409) {
-          // A lost successful response can leave a draft marked dirty. If the
-          // server already has exactly that library, acknowledge it safely.
-          if (JSON.stringify(data.library) === JSON.stringify(current.current?.library)) {
-            persist({ ...current.current!, revision: data.revision, dirty: false });
-            setStatus("saved");
-            setError("");
-            return;
-          }
-          conflictRef.current = data;
-          setConflict(data);
-          setStatus("conflict");
-          return;
-        }
-        if (!response.ok) {
-          setStatus("offline");
-          return;
-        }
-        const latest = current.current!;
-        if (!draft.dirty) {
-          if (latest.dirty && latest.revision !== data.revision) {
-            conflictRef.current = data;
-            setConflict(data);
-            setStatus("conflict");
-            return;
-          }
-          if (!latest.dirty) {
-            persist({
-              ...latest,
-              library: librarySchema.parse(data.library),
-              revision: data.revision,
-            });
-            setLibrary(data.library);
-            setStatus("saved");
-          }
-        } else {
-          persist({
-            ...latest,
-            revision: data.revision,
-            dirty: latest.generation !== draft.generation,
-          });
-          setStatus(latest.generation === draft.generation ? "saved" : "saving");
-        }
-        setError("");
-      } catch {
-        if (!alive.current) return;
-        setStatus("offline");
-      } finally {
-        syncing.current = false;
-      }
-    },
-    [persist],
-  );
+  const [state, setState] = useState(emptyDeviceState);
+  const current = useRef<DeviceLibrarySession | null>(null);
 
   useEffect(() => {
-    alive.current = true;
-    async function initialize() {
-      let cached: Envelope | null = null;
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const candidate = JSON.parse(raw);
-          cached = {
-            library: librarySchema.parse(candidate.library),
-            revision: Number(candidate.revision) || 0,
-            dirty: Boolean(candidate.dirty),
-            generation: Number(candidate.generation) || 0,
-          };
-          current.current = cached;
-          setLibrary(cached.library);
-          setReady(true);
-          setStatus(cached.dirty ? "saving" : "saved");
-        }
-      } catch {
-        setError("The saved device cache could not be read. We’ll try your SQLite library.");
+    let storage: Storage | null = null;
+    try {
+      storage = window.localStorage;
+    } catch {
+      /* IndexedDB can still work. */
+    }
+    let channel: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        channel = new BroadcastChannel("bookit-device-library");
       }
-      try {
+    } catch {
+      /* Focus refresh still supports browsers without tab messaging. */
+    }
+    const session = new DeviceLibrarySession({
+      open: () => openDeviceDatabase(),
+      storage,
+      // Import SQLite on first use, or check a clean legacy cache once during migration.
+      // Once migrated, every read and write is on this device, with no HTTP requests.
+      bootstrap: async (legacy) => {
         const response = await fetch("/api/library", {
           cache: "no-store",
-          signal: AbortSignal.timeout(12_000),
+          signal: AbortSignal.timeout(2000),
         });
-        if (!response.ok) throw new Error("The local SQLite database is unavailable.");
-        const remote: Snapshot = await response.json();
-        remote.library = librarySchema.parse(remote.library);
-        if (!alive.current) return;
-        // A user may have started typing while the initial request was in flight.
-        const latest = current.current;
-        if (latest?.dirty) {
-          if (latest.revision !== remote.revision) {
-            conflictRef.current = remote;
-            setConflict(remote);
-            setStatus("conflict");
-          } else await sync();
-        } else {
-          persist({ ...remote, dirty: false, generation: 0 });
-          setLibrary(remote.library);
-          setStatus("saved");
-        }
-      } catch {
-        if (!alive.current) return;
-        if (!cached) {
-          persist({
-            library: { books: [], collections: [] },
-            revision: 0,
-            dirty: false,
-            generation: 0,
-          });
-        }
-        setStatus("offline");
-      } finally {
-        if (alive.current) setReady(true);
-      }
-    }
-    void initialize();
-    const reconnect = () => {
-      void sync(true);
+        if (!response.ok) throw new Error("Existing library unavailable.");
+        const snapshot = syncSchema.parse(await response.json());
+        return legacy && snapshot.revision < legacy.revision ? legacy.library : snapshot.library;
+      },
+      committed: () => channel?.postMessage("updated"),
+    });
+    current.current = session;
+    const unsubscribe = session.subscribe(() => setState(session.getState()));
+    void session.initialize();
+    const refresh = () => {
+      void session.refresh();
     };
-    const disconnect = () => setStatus("offline");
-    const interval = setInterval(() => {
-      void sync();
-    }, 5000);
-    window.addEventListener("online", reconnect);
-    window.addEventListener("offline", disconnect);
+    const visible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const protectUnsaved = (event: BeforeUnloadEvent) => {
+      if (!session.hasUnprotectedEdits()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    channel?.addEventListener("message", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("beforeunload", protectUnsaved);
+    document.addEventListener("visibilitychange", visible);
+    if (navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
     return () => {
-      alive.current = false;
-      clearInterval(interval);
-      if (timer.current) clearTimeout(timer.current);
-      window.removeEventListener("online", reconnect);
-      window.removeEventListener("offline", disconnect);
+      unsubscribe();
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("beforeunload", protectUnsaved);
+      document.removeEventListener("visibilitychange", visible);
+      channel?.close();
+      session.dispose();
+      if (current.current === session) current.current = null;
     };
-  }, [persist, sync]);
+  }, []);
 
-  const update = useCallback(
-    (mutate: (library: Library) => Library) => {
-      const previous = current.current;
-      if (!previous) return;
-      const next = librarySchema.parse(mutate(previous.library));
-      persist({ ...previous, library: next, dirty: true, generation: previous.generation + 1 });
-      setLibrary(next);
-      setStatus(conflictRef.current ? "conflict" : navigator.onLine ? "saving" : "offline");
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        void sync();
-      }, 750);
-    },
-    [persist, sync],
-  );
+  const update = useCallback((mutate: (library: Library) => Library) => {
+    current.current?.update(mutate);
+  }, []);
+  const resolveConflict = useCallback((choice: "device" | "saved") => {
+    const session = current.current;
+    const snapshot = session?.getState();
+    if (!session || !snapshot?.conflict) return;
+    downloadLibrary(choice === "saved" ? snapshot.library : snapshot.conflict.library);
+    void session.resolveConflict(choice);
+  }, []);
+  const clearError = useCallback(() => current.current?.clearError(), []);
 
-  const resolveConflict = useCallback(
-    (choice: "device" | "server") => {
-      const remote = conflictRef.current;
-      if (!remote || !current.current) return;
-      if (choice === "server") {
-        downloadLibrary(current.current.library);
-        persist({ ...remote, dirty: false, generation: current.current.generation + 1 });
-        setLibrary(remote.library);
-        setStatus("saved");
-      } else {
-        downloadLibrary(remote.library);
-        persist({ ...current.current, revision: remote.revision, dirty: true });
-        setStatus("saving");
-      }
-      conflictRef.current = null;
-      setConflict(null);
-      if (choice === "device") void sync();
-    },
-    [persist, sync],
-  );
-
-  return {
-    library,
-    ready,
-    status,
-    error,
-    conflict,
-    update,
-    retry: () => sync(true),
-    resolveConflict,
-    clearError: () => setError(""),
-  };
+  return { ...state, update, resolveConflict, clearError };
 }

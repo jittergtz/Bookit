@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Ellipsis,
   Heart,
+  ImagePlus,
   List,
   Paintbrush,
   Plus,
@@ -132,6 +133,16 @@ export function BookReader({
       setLayoutError(cause instanceof Error ? cause.message : "This layout could not be changed.");
     }
   };
+  const addPhoto = () => {
+    try {
+      if (page.layout !== "canvas") editPage(setPageLayout(page, "canvas"));
+      setLayoutError("");
+      setPanel("layout");
+    } catch (cause) {
+      setLayoutError(cause instanceof Error ? cause.message : "This page could not be arranged.");
+      setPanel("style");
+    }
+  };
 
   return (
     <div className="reader">
@@ -154,13 +165,6 @@ export function BookReader({
             background: book.coverColor,
           }}
         />
-      </div>
-      <div className="reader-meta">
-        <button className="text-button" onClick={() => setPanel("style")}>
-          <Paintbrush size={14} />
-          Page style
-          <ChevronDown size={12} />
-        </button>
       </div>
       <main
         className="reader-paper-wrap"
@@ -209,14 +213,16 @@ export function BookReader({
                 </span>
                 <span className="paper-number">{String(index + 1).padStart(2, "0")}</span>
               </div>
-              <input
-                className="page-title"
-                value={page.title}
-                maxLength={160}
-                onChange={(event) => editPage({ title: event.target.value })}
-                placeholder={index === 0 ? "Give this page a title…" : undefined}
-                aria-label="Page title"
-              />
+              {(index === 0 || page.title.trim()) && (
+                <input
+                  className="page-title"
+                  value={page.title}
+                  maxLength={160}
+                  onChange={(event) => editPage({ title: event.target.value })}
+                  placeholder={index === 0 ? "Give this page a title…" : undefined}
+                  aria-label="Page title"
+                />
+              )}
               <div className="page-writing">
                 <textarea
                   ref={textarea}
@@ -246,6 +252,10 @@ export function BookReader({
         <button className="text-button" onClick={insertQuote}>
           <Quote size={16} />
           Add a quote
+        </button>
+        <button className="text-button" onClick={addPhoto}>
+          <ImagePlus size={16} />
+          Add photo
         </button>
         {page.layout === "canvas" && (
           <button className="text-button" onClick={() => setPanel("layout")}>
@@ -316,7 +326,7 @@ export function BookReader({
                 </button>
               </div>
               <p className="small-note">
-                Free layout lets you place text and stickers anywhere on the page.
+                Free layout lets you place text, stickers, and photos anywhere on the page.
               </p>
               {layoutError && (
                 <p className="small-note" role="alert">
@@ -446,6 +456,11 @@ export function BookReader({
           onClose={() => setPanel(null)}
         >
           <div className="menu-list">
+            <button onClick={() => setPanel("style")}>
+              <Paintbrush size={19} />
+              <span>Page style</span>
+              <ChevronRight size={16} />
+            </button>
             <button
               onClick={() => {
                 setPanel(null);
