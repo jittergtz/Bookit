@@ -65,12 +65,10 @@ export function BookitApp() {
   useEffect(() => {
     const savedTheme = localStorage.getItem("bookit-theme-v1");
     const nextTheme = savedTheme === "dark" ? "dark" : "light";
-    setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute(
-      "content",
-      nextTheme === "dark" ? "#101010" : "#ffffff",
-    );
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", nextTheme === "dark" ? "#101010" : "#ffffff");
     const readHash = () =>
       setOpenedId(new URLSearchParams(window.location.hash.slice(1)).get("book"));
     const prompt = (event: Event) => {
@@ -83,6 +81,7 @@ export function BookitApp() {
       setNotice("Bookit is now on your home screen.");
     };
     queueMicrotask(() => {
+      setTheme(nextTheme);
       readHash();
       setIsStandalone(window.matchMedia("(display-mode: standalone)").matches);
     });
@@ -102,10 +101,9 @@ export function BookitApp() {
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
     localStorage.setItem("bookit-theme-v1", nextTheme);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute(
-      "content",
-      nextTheme === "dark" ? "#101010" : "#ffffff",
-    );
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", nextTheme === "dark" ? "#101010" : "#ffffff");
   };
   useEffect(() => {
     if (!notice) return;

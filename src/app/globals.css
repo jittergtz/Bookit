@@ -22,6 +22,9 @@
   --accent: #171717;
   --line: #e5e5e5;
   --line-strong: #d4d4d4;
+  --ambient-light: radial-gradient(ellipse 74% 42% at 0% 8%, rgba(182, 192, 186, 0.58), transparent 74%),
+    radial-gradient(ellipse 64% 46% at 100% 31%, rgb(244 226 203 / 62%), transparent 72%),
+    radial-gradient(ellipse 82% 48% at 32% 100%, rgb(222 220 241 / 48%), transparent 72%);
   --serif: "Lora Variable", Georgia, serif;
   --sans: "DM Sans Variable", sans-serif;
 }
@@ -39,6 +42,9 @@
   --accent: #f3f3f3;
   --line: #323232;
   --line-strong: #464646;
+  --ambient-light: radial-gradient(ellipse 74% 42% at 0% 8%, rgba(55, 58, 57, 0.48), transparent 74%),
+    radial-gradient(ellipse 64% 46% at 100% 31%, rgba(68, 55, 44, 0.34), transparent 72%),
+    radial-gradient(ellipse 82% 48% at 32% 100%, rgba(45, 44, 59, 0.4), transparent 72%);
 }
 * {
   box-sizing: border-box;
@@ -117,13 +123,16 @@ legend {
 }
 .app-frame {
   min-height: 100dvh;
+  background-color: var(--canvas);
+  background-image: var(--ambient-light);
+  background-attachment: fixed;
 }
 .mobile-app {
   position: relative;
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
-  background: var(--bg);
+  background: transparent;
   min-height: 100dvh;
 }
 
@@ -465,7 +474,12 @@ legend {
   right: -3px;
   width: 4px;
   z-index: -2;
-  background: repeating-linear-gradient(90deg, var(--line) 0px, var(--surface) 1px, var(--line-strong) 2px);
+  background: repeating-linear-gradient(
+    90deg,
+    var(--line) 0px,
+    var(--surface) 1px,
+    var(--line-strong) 2px
+  );
   border-radius: 0 4px 4px 0;
 }
 .cover-small {
@@ -559,7 +573,9 @@ legend {
 }
 [data-theme="dark"] .nav-selection {
   background: #ffffff16;
-  box-shadow: inset 0 1px 1px #ffffff18, 0 1px 5px #00000030;
+  box-shadow:
+    inset 0 1px 1px #ffffff18,
+    0 1px 5px #00000030;
 }
 [data-theme="dark"] .bottom-nav > .nav-create:active {
   background-color: #ffffff20;
@@ -1109,7 +1125,10 @@ textarea::placeholder {
   background: var(--surface);
   color: var(--muted);
   font-size: 12px;
-  transition: border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
 }
 .appearance-option.selected {
   border-color: var(--ink);
@@ -1213,7 +1232,7 @@ textarea::placeholder {
 .reader {
   min-height: 100dvh;
   padding-bottom: calc(90px + env(safe-area-inset-bottom));
-  background: var(--canvas);
+  background: transparent;
 }
 .reader-header {
   display: flex;
