@@ -1,5 +1,5 @@
 /* Bump the version whenever the app shell changes. Device data lives in IndexedDB. */
-const CACHE = "bookit-shell-v9";
+const CACHE = "bookit-shell-v11";
 const SHELL = [
   "/",
   "/manifest.webmanifest",

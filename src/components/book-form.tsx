@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import {
+  applyBookPaperDefaults,
   coverColors,
   coverPatterns,
   getCoverDesign,
@@ -11,6 +12,7 @@ import {
   newPage,
   paperColors,
   paperPatterns,
+  paperStyle,
   type Book,
   type Collection,
   type CoverDesign,
@@ -109,13 +111,16 @@ export function BookForm({
         ? existing || { id: newId(), name: collectionName.trim() }
         : undefined;
     onSave(
-      {
-        ...draft,
-        title: draft.title.trim(),
-        collectionId: collection?.id || draft.collectionId,
-        pages: draft.pages.length ? draft.pages : [newPage(draft)],
-        updatedAt: new Date().toISOString(),
-      },
+      applyBookPaperDefaults(
+        {
+          ...draft,
+          title: draft.title.trim(),
+          collectionId: collection?.id || draft.collectionId,
+          pages: draft.pages.length ? draft.pages : [newPage(draft)],
+          updatedAt: new Date().toISOString(),
+        },
+        book ?? draft,
+      ),
       existing ? undefined : collection,
     );
   };
@@ -344,6 +349,11 @@ export function BookForm({
               onColor={(color) => set("paperColor", color)}
               onPattern={(pattern) => set("paperPattern", pattern)}
             />
+            <p className="small-note">
+              {book
+                ? "Saving updates every page using the book defaults. Pages with custom paper keep their own color and pattern."
+                : "Every new page starts with this color and pattern. You can customize individual pages anytime."}
+            </p>
           </>
         )}
         <fieldset>
@@ -375,11 +385,6 @@ export function BookForm({
             />
           )}
         </fieldset>
-        {book && (
-          <p className="small-note">
-            Paper choices apply to new pages. Existing pages keep their own style.
-          </p>
-        )}
         <div className="sheet-footer">
           <button className="primary-button" type="submit">
             {book ? <Check size={18} /> : <Plus size={18} />}{" "}
@@ -412,11 +417,16 @@ export function PaperOptions({
               type="button"
               key={value}
               className={`color-swatch ${color === value ? "selected" : ""}`}
-              style={{ background: value }}
+              style={{ background: value, color: paperStyle(value).color }}
               aria-label={
-                ["Warm ivory paper", "White paper", "Sage paper", "Blush paper", "Blue paper"][
-                  index
-                ]
+                [
+                  "Warm ivory paper",
+                  "White paper",
+                  "Sage paper",
+                  "Blush paper",
+                  "Blue paper",
+                  "Dark gray paper",
+                ][index]
               }
               aria-pressed={color === value}
               onClick={() => onColor(value)}
@@ -438,7 +448,7 @@ export function PaperOptions({
               aria-pressed={pattern === value}
               onClick={() => onPattern(value)}
             >
-              <span className={`paper-sample paper-${value}`} style={{ backgroundColor: color }} />
+              <span className={`paper-sample paper-${value}`} style={paperStyle(color)} />
               <span>
                 {value === "lined"
                   ? "Lines"

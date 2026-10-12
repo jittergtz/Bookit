@@ -10,7 +10,14 @@ export const coverColors = [
   "#a36d7b",
   "#5d8177",
 ] as const;
-export const paperColors = ["#faf7ee", "#ffffff", "#eaf0e5", "#f4e7df", "#e8eef4"] as const;
+export const paperColors = [
+  "#faf7ee",
+  "#ffffff",
+  "#eaf0e5",
+  "#f4e7df",
+  "#e8eef4",
+  "#303238",
+] as const;
 export const paperPatterns = ["blank", "lined", "grid", "dotted"] as const;
 export type PaperPattern = (typeof paperPatterns)[number];
 export type FontStyle = "serif" | "sans";
@@ -73,6 +80,7 @@ export const pageSchema = z.object({
   content: z.string().max(100_000),
   paperColor: colorSchema,
   paperPattern: z.enum(paperPatterns),
+  paperCustomized: z.boolean().optional(),
   font: z.enum(["serif", "sans"]),
   layout: z.enum(["writing", "canvas"]).optional(),
   elements: designElementsSchema.optional(),
@@ -150,11 +158,69 @@ export function newPage(
     content: "",
     paperColor: book.paperColor,
     paperPattern: book.paperPattern,
+    paperCustomized: false,
     font: book.font,
     layout: book.pageLayout ?? "writing",
     elements: [],
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+type PaperDefaults = Pick<Book, "paperColor" | "paperPattern">;
+
+export function usesBookPaper(page: Page, book: PaperDefaults): boolean {
+  // Legacy pages have no inheritance marker. Preserve differing paper as custom.
+  return page.paperCustomized === undefined
+    ? page.paperColor.toLowerCase() === book.paperColor.toLowerCase() &&
+        page.paperPattern === book.paperPattern
+    : !page.paperCustomized;
+}
+
+export function resetPagePaper(page: Page, book: PaperDefaults): Page {
+  return {
+    ...page,
+    paperColor: book.paperColor,
+    paperPattern: book.paperPattern,
+    paperCustomized: false,
+  };
+}
+
+export function applyBookPaperDefaults(book: Book, previousDefaults: PaperDefaults): Book {
+  return {
+    ...book,
+    pages: book.pages.map((page) => {
+      if (!usesBookPaper(page, previousDefaults))
+        return page.paperCustomized === true ? page : { ...page, paperCustomized: true };
+      const changed =
+        page.paperColor !== book.paperColor || page.paperPattern !== book.paperPattern;
+      return {
+        ...resetPagePaper(page, book),
+        updatedAt: changed ? book.updatedAt : page.updatedAt,
+      };
+    }),
+  };
+}
+
+export function paperStyle(color: string) {
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map((start) => {
+      const value = parseInt(hex.slice(start, start + 2), 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  };
+  const background = luminance(color);
+  const darkContrast = (background + 0.05) / (luminance("#171717") + 0.05);
+  const lightContrast = (luminance("#fafafa") + 0.05) / (background + 0.05);
+  const ink = darkContrast >= lightContrast ? "#171717" : "#fafafa";
+  return {
+    backgroundColor: color,
+    color: ink,
+    "--paper-ink": ink,
+    "--paper-muted": `${ink}99`,
+    "--paper-line": `${ink}24`,
+    "--paper-dot": `${ink}50`,
   };
 }
 
@@ -257,7 +323,15 @@ export function setPageLayout(page: Page, layout: "writing" | "canvas"): Page {
     : [
         ...existing.filter((item) => item.kind !== "text" || item.source !== "custom"),
         ...(page.title && !existing.some((item) => item.source === "title")
-          ? [newDesignElement({ source: "title", y: 18, font: page.font, fontSize: 26 })]
+          ? [
+              newDesignElement({
+                source: "title",
+                y: 18,
+                font: page.font,
+                fontSize: 26,
+                color: paperStyle(page.paperColor).color,
+              }),
+            ]
           : []),
         ...(page.content
           ? [
@@ -267,6 +341,7 @@ export function setPageLayout(page: Page, layout: "writing" | "canvas"): Page {
                 fontSize: 16,
                 align: "left",
                 width: 84,
+                color: paperStyle(page.paperColor).color,
               }),
             ]
           : []),

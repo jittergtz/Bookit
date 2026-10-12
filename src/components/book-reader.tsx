@@ -21,7 +21,10 @@ import {
   newDesignElement,
   newPage,
   pageText,
+  paperStyle,
+  resetPagePaper,
   setPageLayout,
+  usesBookPaper,
   wordCount,
   type Book,
   type Page,
@@ -108,7 +111,12 @@ export function BookReader({
       editPage({
         elements: [
           ...(page.elements ?? []),
-          newDesignElement({ text: "“Your quote here”\n— ", font: page.font, fontSize: 24 }),
+          newDesignElement({
+            text: "“Your quote here”\n— ",
+            font: page.font,
+            fontSize: 24,
+            color: paperStyle(page.paperColor).color,
+          }),
         ],
       });
       setPanel("layout");
@@ -193,7 +201,7 @@ export function BookReader({
         <article
           key={page.id}
           className={`reader-paper paper-${page.paperPattern} font-${page.font} turn-${direction} ${page.layout === "canvas" ? "is-canvas" : ""}`}
-          style={{ backgroundColor: page.paperColor }}
+          style={paperStyle(page.paperColor)}
         >
           {page.layout === "canvas" ? (
             <DesignCanvas
@@ -342,9 +350,23 @@ export function BookReader({
             <PaperOptions
               color={page.paperColor}
               pattern={page.paperPattern}
-              onColor={(paperColor) => editPage({ paperColor })}
-              onPattern={(paperPattern) => editPage({ paperPattern })}
+              onColor={(paperColor) => editPage({ paperColor, paperCustomized: true })}
+              onPattern={(paperPattern) => editPage({ paperPattern, paperCustomized: true })}
             />
+            <p className="small-note">
+              {usesBookPaper(page, book)
+                ? "Using book defaults. This paper updates when you change the book’s color or pattern."
+                : "Custom paper for this page. Changes to the book defaults won’t affect it."}
+            </p>
+            {!usesBookPaper(page, book) && (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => editPage(resetPagePaper(page, book))}
+              >
+                Use book defaults
+              </button>
+            )}
             <fieldset>
               <legend>Writing typeface</legend>
               <div className="choice-row">
@@ -396,13 +418,14 @@ export function BookReader({
               elements={page.elements ?? []}
               values={{ title: page.title }}
               defaultFont={page.font}
+              defaultColor={paperStyle(page.paperColor).color}
               defaultSize={22}
               onSourceChange={(_, title) => editPage({ title })}
               onChange={(elements) => editPage({ elements })}
               renderCanvas={(editor) => (
                 <div
                   className={`page-workspace paper-${page.paperPattern}`}
-                  style={{ backgroundColor: page.paperColor }}
+                  style={paperStyle(page.paperColor)}
                 >
                   <DesignCanvas
                     elements={page.elements ?? []}

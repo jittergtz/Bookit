@@ -961,26 +961,26 @@ textarea::placeholder {
   background-image: repeating-linear-gradient(
     transparent 0,
     transparent 31px,
-    #17171723 31px,
-    #17171723 32px
+    var(--paper-line, #17171723) 31px,
+    var(--paper-line, #17171723) 32px
   );
 }
 .paper-grid {
   background-image:
-    linear-gradient(#17171720 1px, transparent 1px),
-    linear-gradient(90deg, #17171720 1px, transparent 1px);
+    linear-gradient(var(--paper-line, #17171720) 1px, transparent 1px),
+    linear-gradient(90deg, var(--paper-line, #17171720) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 .paper-dotted {
-  background-image: radial-gradient(#1717174d 0.7px, transparent 0.9px);
+  background-image: radial-gradient(var(--paper-dot, #1717174d) 0.7px, transparent 0.9px);
   background-size: 18px 18px;
 }
 .paper-sample.paper-lined {
   background-image: repeating-linear-gradient(
     transparent 0,
     transparent 9px,
-    #17171733 9px,
-    #17171733 10px
+    var(--paper-line, #17171733) 9px,
+    var(--paper-line, #17171733) 10px
   );
 }
 .paper-sample.paper-grid {
@@ -1312,7 +1312,7 @@ textarea::placeholder {
   align-items: center;
   font-family: var(--sans);
   font-size: 8px;
-  color: var(--muted);
+  color: var(--paper-muted);
   letter-spacing: 0.4px;
   margin-bottom: 25px;
 }
@@ -1320,7 +1320,7 @@ textarea::placeholder {
   font-family: var(--serif);
   font-size: 13px;
   font-style: italic;
-  color: var(--muted-soft);
+  color: var(--paper-muted);
 }
 .page-title {
   width: 100%;
@@ -1331,9 +1331,9 @@ textarea::placeholder {
   background: transparent;
   border: 0;
   padding: 0 0 12px;
-  border-bottom: 1px solid #1717171f;
+  border-bottom: 1px solid var(--paper-line);
   margin-bottom: 18px;
-  color: var(--ink-soft);
+  color: var(--paper-ink);
 }
 .page-title:focus,
 .page-content:focus {
@@ -1341,7 +1341,7 @@ textarea::placeholder {
 }
 .page-title::placeholder {
   font-size: 18px;
-  color: var(--muted-soft);
+  color: var(--paper-muted);
 }
 .page-writing {
   width: 100%;
@@ -1350,8 +1350,8 @@ textarea::placeholder {
   background-image: repeating-linear-gradient(
     transparent 0,
     transparent 31px,
-    #17171725 31px,
-    #17171725 32px
+    var(--paper-line) 31px,
+    var(--paper-line) 32px
   );
   background-position: 0 -3px;
 }
@@ -1369,17 +1369,17 @@ textarea::placeholder {
   background: transparent;
   border: none;
   resize: none;
-  color: var(--ink-soft);
+  color: var(--paper-ink);
   overflow: hidden;
 }
 .page-content::placeholder {
-  color: var(--muted-soft);
+  color: var(--paper-muted);
 }
 .paper-bottom {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--muted-soft);
+  color: var(--paper-muted);
   font-family: var(--sans);
   font-size: 8px;
   letter-spacing: 0.5px;

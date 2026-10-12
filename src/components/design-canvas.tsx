@@ -18,6 +18,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { designFonts, newDesignElement, newId, type DesignElement } from "@/lib/model";
+import { preparePhoto } from "@/lib/photo";
 
 export type CanvasValues = { title?: string; subtitle?: string };
 type DragPreview = { id: string; x: number; y: number; width: number; mode: "move" | "resize" };
@@ -376,6 +377,7 @@ export function CanvasEditor({
   const [showStickers, setShowStickers] = useState(false);
   const [customSticker, setCustomSticker] = useState("");
   const [error, setError] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [history, setHistory] = useState<{ past: DesignElement[][]; future: DesignElement[][] }>({
     past: [],
     future: [],
@@ -406,28 +408,18 @@ export function CanvasEditor({
   };
   const upload = async (imageFile?: File) => {
     if (!imageFile) return;
+    setUploading(true);
+    setError("");
     try {
-      if (
-        !["image/png", "image/jpeg", "image/webp"].includes(imageFile.type) ||
-        imageFile.size > 10_000_000
-      )
-        throw new Error("Choose a PNG, JPG, or WebP image under 10 MB.");
-      const bitmap = await createImageBitmap(imageFile);
-      const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      bitmap.close();
-      const image = canvas.toDataURL("image/webp", 0.8);
-      if (image.length > 300_000)
-        throw new Error("This photo is too detailed. Try a smaller image.");
+      const image = await preparePhoto(imageFile);
       add({ kind: "image", image, width: 35, text: "" });
       setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "This image could not be opened.");
+    } finally {
+      setUploading(false);
+      if (file.current) file.current.value = "";
     }
-    if (file.current) file.current.value = "";
   };
   return (
     <div className="canvas-editor">
@@ -452,10 +444,10 @@ export function CanvasEditor({
         <button
           type="button"
           onClick={() => file.current?.click()}
-          disabled={elements.length >= 30}
+          disabled={elements.length >= 30 || uploading}
         >
           <ImagePlus size={17} />
-          Add photo
+          {uploading ? "Opening photo…" : "Add photo"}
         </button>
         <button
           type="button"
@@ -484,7 +476,7 @@ export function CanvasEditor({
       <input
         ref={file}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/*"
         className="visually-hidden"
         aria-label="Add a photo or image"
         onChange={(event) => void upload(event.target.files?.[0])}
