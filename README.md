@@ -1,6 +1,6 @@
 # Bookit
 
-A mobile-first personal notebook app. Create books for a year, life lessons, quotes, or anything you want to keep. Customize cloth-like covers, serif or sans-serif titles, collections, and individual pages with white or tinted blank, lined, grid, or dotted paper.
+A mobile-first personal notebook app. Create books for a year, life lessons, quotes, or anything you want to keep. Design straight book covers with draggable text, emoji or uploaded stickers, any hex color, linear or radial gradients, patterns, optional borders, and cloth texture. Choose serif, sans, typewriter, or handwritten lettering with independent sizes and styles. Keep a cover completely blank while its library name stays visible. Pages support flowing writing or a free canvas for centered quotes, text, and stickers, with white or custom-tinted blank, lined, grid, or dotted paper.
 
 ## Run locally
 
@@ -24,6 +24,14 @@ The production build registers the service worker, caches the app shell and loca
 
 Service workers are intentionally disabled during development to prevent stale development bundles. Bump the cache version in `public/sw.js` when changing the production app shell. Offline sync resumes while the app is open; background sync after the app closes is not implemented.
 
+## Cover and page studio
+
+- **Cover studio:** name your book, choose a starting point (including blank), and open Background for custom colors, gradients, six pattern choices, border, and texture. Add text, preset or custom symbols, or a PNG/JPG/WebP sticker. Select a layer to edit its text, typeface, color, size, weight, alignment, width, and rotation. Drag it, use arrow keys (Shift for larger moves), or enter positions. Center guides snap while dragging; the Center button places a layer exactly in the middle. Layers can be duplicated, reordered, removed, and undone/redone.
+- **Default paper:** choose the layout, color, and pattern for newly created pages. Each existing page retains its own settings.
+- **Page style → Free layout → Arrange this page:** use the same canvas tools on paper. Normal writing keeps a title and flowing text; only the first writing page shows prompts. Switching layouts keeps text and sticker artwork. Long entries are best suited to normal writing.
+- Artwork positions and font sizes scale with the canvas. There are no mandatory cover icons, labels, or page branding. Image stickers are resized to 512 pixels before storage, retain transparency, and travel with JSON backups and offline drafts. Each canvas supports up to 30 layers; total library and device storage limits still apply.
+- Existing SQLite files and older backups remain compatible. Design fields are optional JSON properties in the existing books/pages tables; reading an older library does not rewrite it.
+
 ## Storage and backup
 
 - SQLite file: `data/bookit.sqlite` (created automatically and ignored by Git).
@@ -44,8 +52,8 @@ npm test
 npm run build
 ```
 
-Seven tests cover durable SQLite persistence, API saves, stale-write protection, collection/book deletion, invalid data rejection, and offline app-shell caching. Browser checks also verify customization, search, favorites, backup export, offline writing, reconnection sync, and reloading the app with its server stopped.
+Eleven tests cover durable SQLite persistence, API saves, stale-write protection, collection/book deletion, invalid data rejection, offline app-shell caching, rich artwork persistence and backup restoration, older-library compatibility, and lossless page-layout changes. Browser checks also verify customization, search, favorites, backup export, offline writing, reconnection sync, and reloading the app with its server stopped.
 
 `npm audit --omit=dev` reports no production vulnerabilities. The Next.js ESLint toolchain currently has an upstream `braces`/glob development-only advisory with no patched `braces` release; it is not included in the running app.
 
-Built with Next.js App Router, React, Tailwind CSS, Lucide icons, Lora and DM Sans (self-hosted), Zod, and SQLite.
+Built with Next.js App Router, React, Tailwind CSS, Lucide icons, Lora, DM Sans, and Caveat (self-hosted), Zod, and SQLite.

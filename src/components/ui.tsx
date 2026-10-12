@@ -1,34 +1,58 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { BookOpen, Sparkles, X } from "lucide-react";
-import type { Book } from "@/lib/model";
+import { X } from "lucide-react";
+import {
+  coverFill,
+  coverPattern,
+  getCoverDesign,
+  type Book,
+  type DesignElement,
+} from "@/lib/model";
+import { DesignCanvas } from "./design-canvas";
 
 export function BookCover({
   book,
   size = "normal",
+  editor,
 }: {
   book: Book;
   size?: "normal" | "small" | "preview";
+  editor?: {
+    selectedId: string | null;
+    onSelect: (id: string | null) => void;
+    onChange: (elements: DesignElement[]) => void;
+  };
 }) {
+  const design = getCoverDesign(book);
   return (
     <div
-      className={`book-cover cover-${book.coverStyle} cover-${size} font-${book.font}`}
-      style={{ "--cover": book.coverColor } as CSSProperties}
+      className={`book-cover cover-${size} ${editor ? "cover-editing" : ""}`}
+      style={
+        {
+          "--cover": book.coverColor,
+          backgroundImage: coverFill(book.coverColor, design),
+        } as CSSProperties
+      }
     >
       <div className="cover-spine" />
-      <div className="cover-grain" />
-      <div className="cover-layout">
-        <span className="cover-edition">A BOOK OF MY OWN</span>
-        <span className="cover-title">{book.title}</span>
-        <span className="cover-ornament">
-          <span />
-          <Sparkles size={14} strokeWidth={1.2} />
-          <span />
-        </span>
-        <span className="cover-subtitle">{book.subtitle || "Every chapter is yours"}</span>
-        <BookOpen className="cover-mark" size={17} strokeWidth={1.2} />
-      </div>
+      {design.texture && <div className="cover-grain" />}
+      <div
+        className="cover-pattern"
+        style={{ ...coverPattern(design), opacity: design.patternOpacity }}
+      />
+      {design.frame !== "none" && (
+        <div
+          className={`cover-border border-${design.frame}`}
+          style={{ borderColor: design.patternColor }}
+        />
+      )}
+      <DesignCanvas
+        elements={design.elements}
+        values={{ title: book.title, subtitle: book.subtitle }}
+        label={editor ? "Cover canvas" : `${book.title} cover`}
+        {...editor}
+      />
       <span className="cover-pages" />
     </div>
   );

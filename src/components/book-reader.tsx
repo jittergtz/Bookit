@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -17,21 +16,27 @@ import {
   Quote,
   Trash2,
 } from "lucide-react";
-import { newPage, wordCount, type Book, type Page } from "@/lib/model";
-import type { SaveStatus } from "@/lib/use-library";
+import {
+  newDesignElement,
+  newPage,
+  pageText,
+  setPageLayout,
+  wordCount,
+  type Book,
+  type Page,
+} from "@/lib/model";
 import { PaperOptions } from "./book-form";
 import { Sheet } from "./ui";
+import { CanvasEditor, DesignCanvas } from "./design-canvas";
 
 export function BookReader({
   book,
-  status,
   onChange,
   onClose,
   onCustomize,
   onDelete,
 }: {
   book: Book;
-  status: SaveStatus;
   onChange: (book: Book) => void;
   onClose: () => void;
   onCustomize: () => void;
@@ -48,9 +53,10 @@ export function BookReader({
     }
   });
   const [panel, setPanel] = useState<
-    "style" | "contents" | "menu" | "delete-page" | "delete-book" | null
+    "style" | "layout" | "contents" | "menu" | "delete-page" | "delete-book" | null
   >(null);
   const [direction, setDirection] = useState("next");
+  const [layoutError, setLayoutError] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
   const gesture = useRef<{ x: number; y: number; editing: boolean } | null>(null);
   const page = book.pages[Math.min(index, book.pages.length - 1)];
@@ -96,6 +102,17 @@ export function BookReader({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const insertQuote = () => {
+    if (page.layout === "canvas") {
+      if ((page.elements?.length ?? 0) >= 30) return;
+      editPage({
+        elements: [
+          ...(page.elements ?? []),
+          newDesignElement({ text: "“Your quote here”\n— ", font: page.font, fontSize: 24 }),
+        ],
+      });
+      setPanel("layout");
+      return;
+    }
     const field = textarea.current;
     const start = field?.selectionStart ?? page.content.length;
     const end = field?.selectionEnd ?? start;
@@ -106,6 +123,14 @@ export function BookReader({
       field?.focus();
       field?.setSelectionRange(start + 1, start + 1 + (selection.length || 15));
     });
+  };
+  const switchLayout = (layout: "writing" | "canvas") => {
+    try {
+      editPage(setPageLayout(page, layout));
+      setLayoutError("");
+    } catch (cause) {
+      setLayoutError(cause instanceof Error ? cause.message : "This layout could not be changed.");
+    }
   };
 
   return (
@@ -136,18 +161,6 @@ export function BookReader({
           Page style
           <ChevronDown size={12} />
         </button>
-        <span className={`save-state ${status}`} aria-live="polite">
-          <span />
-          {status === "saved"
-            ? "All changes saved"
-            : status === "saving"
-              ? "Saving…"
-              : status === "offline"
-                ? "Saved on device"
-                : status === "conflict"
-                  ? "Sync needs attention"
-                  : "Saved on device · retry sync"}
-        </span>
       </div>
       <main
         className="reader-paper-wrap"
@@ -157,9 +170,10 @@ export function BookReader({
             x: touch.clientX,
             y: touch.clientY,
             editing:
-              document.activeElement === event.target &&
-              (event.target instanceof HTMLTextAreaElement ||
-                event.target instanceof HTMLInputElement),
+              !!(event.target as HTMLElement).closest(".design-canvas.is-editable") ||
+              (document.activeElement === event.target &&
+                (event.target instanceof HTMLTextAreaElement ||
+                  event.target instanceof HTMLInputElement)),
           };
         }}
         onTouchEnd={(event) => {
@@ -174,46 +188,58 @@ export function BookReader({
       >
         <article
           key={page.id}
-          className={`reader-paper paper-${page.paperPattern} font-${page.font} turn-${direction}`}
+          className={`reader-paper paper-${page.paperPattern} font-${page.font} turn-${direction} ${page.layout === "canvas" ? "is-canvas" : ""}`}
           style={{ backgroundColor: page.paperColor }}
         >
-          <div className="paper-top">
-            <span>
-              {new Date(page.createdAt).toLocaleDateString("en", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </span>
-            <span className="paper-number">{String(index + 1).padStart(2, "0")}</span>
-          </div>
-          <input
-            className="page-title"
-            value={page.title}
-            maxLength={160}
-            onChange={(event) => editPage({ title: event.target.value })}
-            placeholder="Give this page a title…"
-            aria-label="Page title"
-          />
-          <div className="page-writing">
-            <textarea
-              ref={textarea}
-              className="page-content"
-              value={page.content}
-              maxLength={100000}
-              onChange={(event) => editPage({ content: event.target.value })}
-              placeholder="A thought, a little lesson, a moment worth keeping. Start anywhere…"
-              aria-label="Page content"
-              spellCheck
+          {page.layout === "canvas" ? (
+            <DesignCanvas
+              elements={page.elements ?? []}
+              values={{ title: page.title }}
+              label="Page artwork"
             />
-          </div>
-          <div className="paper-bottom">
-            <span>
-              {wordCount(page.content)} {wordCount(page.content) === 1 ? "word" : "words"}
-            </span>
-            <BookOpen size={15} strokeWidth={1} />
-            <span>BOOKIT</span>
-          </div>
+          ) : (
+            <>
+              <div className="paper-top">
+                <span>
+                  {new Date(page.createdAt).toLocaleDateString("en", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </span>
+                <span className="paper-number">{String(index + 1).padStart(2, "0")}</span>
+              </div>
+              <input
+                className="page-title"
+                value={page.title}
+                maxLength={160}
+                onChange={(event) => editPage({ title: event.target.value })}
+                placeholder={index === 0 ? "Give this page a title…" : undefined}
+                aria-label="Page title"
+              />
+              <div className="page-writing">
+                <textarea
+                  ref={textarea}
+                  className="page-content"
+                  value={page.content}
+                  maxLength={100000}
+                  onChange={(event) => editPage({ content: event.target.value })}
+                  placeholder={
+                    index === 0
+                      ? "A thought, a little lesson, a moment worth keeping. Start anywhere…"
+                      : undefined
+                  }
+                  aria-label="Page content"
+                  spellCheck
+                />
+              </div>
+              <div className="paper-bottom">
+                <span>
+                  {wordCount(page.content)} {wordCount(page.content) === 1 ? "word" : "words"}
+                </span>
+              </div>
+            </>
+          )}
         </article>
       </main>
       <div className="reader-tools">
@@ -221,7 +247,12 @@ export function BookReader({
           <Quote size={16} />
           Add a quote
         </button>
-        <span>Make room for a thought.</span>
+        {page.layout === "canvas" && (
+          <button className="text-button" onClick={() => setPanel("layout")}>
+            <Paintbrush size={16} />
+            Edit layout
+          </button>
+        )}
       </div>
       <footer className="reader-navigation">
         <button
@@ -264,6 +295,40 @@ export function BookReader({
           onClose={() => setPanel(null)}
         >
           <div className="sheet-content">
+            <fieldset>
+              <legend>Page layout</legend>
+              <div className="choice-row">
+                <button
+                  type="button"
+                  className={`choice ${page.layout !== "canvas" ? "selected" : ""}`}
+                  aria-pressed={page.layout !== "canvas"}
+                  onClick={() => switchLayout("writing")}
+                >
+                  Normal writing
+                </button>
+                <button
+                  type="button"
+                  className={`choice ${page.layout === "canvas" ? "selected" : ""}`}
+                  aria-pressed={page.layout === "canvas"}
+                  onClick={() => switchLayout("canvas")}
+                >
+                  Free layout
+                </button>
+              </div>
+              <p className="small-note">
+                Free layout lets you place text and stickers anywhere on the page.
+              </p>
+              {layoutError && (
+                <p className="small-note" role="alert">
+                  {layoutError}
+                </p>
+              )}
+              {page.layout !== "canvas" && !!page.elements?.length && (
+                <button type="button" className="text-button" onClick={() => setPanel("layout")}>
+                  Edit free layout
+                </button>
+              )}
+            </fieldset>
             <PaperOptions
               color={page.paperColor}
               pattern={page.paperPattern}
@@ -298,9 +363,50 @@ export function BookReader({
               <p className="small-note">Every book needs at least one page.</p>
             )}
             <div className="sheet-footer">
+              <button
+                className="primary-button"
+                onClick={() => setPanel(page.layout === "canvas" ? "layout" : null)}
+              >
+                <Check size={18} />
+                {page.layout === "canvas" ? "Arrange this page" : "Looks good"}
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+      {panel === "layout" && (
+        <Sheet
+          title="Arrange your page"
+          eyebrow={`PAGE ${index + 1}`}
+          onClose={() => setPanel(null)}
+        >
+          <div className="sheet-content">
+            <CanvasEditor
+              key={page.id}
+              elements={page.elements ?? []}
+              values={{ title: page.title }}
+              defaultFont={page.font}
+              defaultSize={22}
+              onSourceChange={(_, title) => editPage({ title })}
+              onChange={(elements) => editPage({ elements })}
+              renderCanvas={(editor) => (
+                <div
+                  className={`page-workspace paper-${page.paperPattern}`}
+                  style={{ backgroundColor: page.paperColor }}
+                >
+                  <DesignCanvas
+                    elements={page.elements ?? []}
+                    values={{ title: page.title }}
+                    label="Page canvas"
+                    {...editor}
+                  />
+                </div>
+              )}
+            />
+            <div className="sheet-footer">
               <button className="primary-button" onClick={() => setPanel(null)}>
                 <Check size={18} />
-                Looks good
+                Done
               </button>
             </div>
           </div>
@@ -320,8 +426,8 @@ export function BookReader({
               >
                 <span className="contents-number">{String(pageIndex + 1).padStart(2, "0")}</span>
                 <div>
-                  <strong>{item.title || "An unwritten chapter"}</strong>
-                  <p>{item.content.slice(0, 70) || "Room for something good."}</p>
+                  <strong>{item.title || `Page ${pageIndex + 1}`}</strong>
+                  <p>{pageText(item).slice(0, 70)}</p>
                 </div>
                 <ArrowRight size={16} />
               </button>

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ArrowDownToLine,
   ArrowRight,
   BookOpen,
   Check,
   ChevronRight,
-  CloudOff,
+  CircleAlert,
   Folder,
   Heart,
   LibraryBig,
@@ -16,15 +15,16 @@ import {
   Plus,
   Search,
   Settings2,
-  Sparkles,
+  Sun,
+  Moon,
   Trash2,
   Upload,
-  WifiOff,
   X,
 } from "lucide-react";
 import {
   librarySchema,
   newId,
+  pageText,
   relativeDate,
   wordCount,
   type Book,
@@ -42,8 +42,7 @@ type InstallPrompt = Event & {
 type Tab = "library" | "collections" | "favorites";
 
 export function BookitApp() {
-  const { library, ready, status, error, conflict, update, retry, resolveConflict, clearError } =
-    useLibrary();
+  const { library, ready, error, conflict, update, resolveConflict, clearError } = useLibrary();
   const [tab, setTab] = useState<Tab>("library");
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -55,10 +54,8 @@ export function BookitApp() {
   const [collectionName, setCollectionName] = useState("");
   const [installPrompt, setInstallPrompt] = useState<InstallPrompt | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [offlineSetup, setOfflineSetup] = useState<
-    "preparing" | "ready" | "unavailable" | "development"
-  >("preparing");
   const [notice, setNotice] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [pendingImport, setPendingImport] = useState<ReturnType<typeof librarySchema.parse> | null>(
     null,
   );
@@ -66,6 +63,14 @@ export function BookitApp() {
   const searchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem("bookit-theme-v1");
+    const nextTheme = savedTheme === "dark" ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      "content",
+      nextTheme === "dark" ? "#101010" : "#ffffff",
+    );
     const readHash = () =>
       setOpenedId(new URLSearchParams(window.location.hash.slice(1)).get("book"));
     const prompt = (event: Event) => {
@@ -84,26 +89,24 @@ export function BookitApp() {
     window.addEventListener("hashchange", readHash);
     window.addEventListener("beforeinstallprompt", prompt);
     window.addEventListener("appinstalled", installed);
-    let active = true;
-    if (process.env.NODE_ENV !== "production") queueMicrotask(() => setOfflineSetup("development"));
-    else if ("serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js")
-        .then(() => navigator.serviceWorker.ready)
-        .then(() => {
-          if (active) setOfflineSetup("ready");
-        })
-        .catch(() => {
-          if (active) setOfflineSetup("unavailable");
-        });
-    } else queueMicrotask(() => setOfflineSetup("unavailable"));
+    if (process.env.NODE_ENV === "production" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(console.error);
+    }
     return () => {
-      active = false;
       window.removeEventListener("hashchange", readHash);
       window.removeEventListener("beforeinstallprompt", prompt);
       window.removeEventListener("appinstalled", installed);
     };
   }, []);
+  const changeTheme = (nextTheme: "light" | "dark") => {
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    localStorage.setItem("bookit-theme-v1", nextTheme);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      "content",
+      nextTheme === "dark" ? "#101010" : "#ffffff",
+    );
+  };
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 5500);
@@ -142,9 +145,17 @@ export function BookitApp() {
     }
   };
   const openedBook = library.books.find((book) => book.id === openedId);
+  const pageTitle =
+    tab === "collections"
+      ? "Collections"
+      : tab === "favorites"
+        ? "Favorites"
+        : filter !== "all"
+          ? library.collections.find((collection) => collection.id === filter)?.name || "Home"
+          : "Home";
   const totalPages = library.books.reduce((sum, book) => sum + book.pages.length, 0);
   const totalWords = library.books.reduce(
-    (sum, book) => sum + book.pages.reduce((count, page) => count + wordCount(page.content), 0),
+    (sum, book) => sum + book.pages.reduce((count, page) => count + wordCount(pageText(page)), 0),
     0,
   );
   const latestBook = [...library.books].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
@@ -154,9 +165,11 @@ export function BookitApp() {
     const search = query.trim().toLowerCase();
     return (
       !search ||
-      [book.title, book.subtitle, ...book.pages.flatMap((page) => [page.title, page.content])].some(
-        (text) => text.toLowerCase().includes(search),
-      )
+      [
+        book.title,
+        book.subtitle,
+        ...book.pages.flatMap((page) => [page.title, pageText(page)]),
+      ].some((text) => text.toLowerCase().includes(search))
     );
   });
   const createCollection = (event: React.FormEvent) => {
@@ -205,19 +218,6 @@ export function BookitApp() {
 
   return (
     <div className="app-frame">
-      <aside className="desktop-note" aria-hidden="true">
-        <BookOpen size={38} strokeWidth={1} />
-        <span className="desktop-wordmark">
-          bookit<span>.</span>
-        </span>
-        <p>
-          A little space.
-          <br />A lot of you.
-        </p>
-        <span className="desktop-caption">Made for the palm of your hand.</span>
-        <div className="desktop-line" />
-        <span className="desktop-small">THOUGHTS · LESSONS · LITTLE DISCOVERIES</span>
-      </aside>
       <div className="mobile-app">
         {!ready ? (
           <div className="loading-screen">
@@ -231,7 +231,6 @@ export function BookitApp() {
           <BookReader
             key={openedBook.id}
             book={openedBook}
-            status={status}
             onChange={(book) =>
               update((previous) => ({
                 ...previous,
@@ -252,29 +251,8 @@ export function BookitApp() {
         ) : (
           <>
             <header className="app-header">
-              <Link
-                href="/"
-                className="brand"
-                onClick={(event) => {
-                  event.preventDefault();
-                  setTab("library");
-                  setFilter("all");
-                  setQuery("");
-                }}
-                aria-label="Bookit home"
-              >
-                <span className="brand-icon">
-                  <BookOpen size={20} strokeWidth={1.5} />
-                </span>
-                <span className="wordmark">
-                  bookit<span>.</span>
-                </span>
-              </Link>
+              <h1 className="page-heading">{pageTitle}</h1>
               <div className="header-actions">
-                <span className="private-label">
-                  <span />
-                  Your little world
-                </span>
                 <button
                   className="icon-button"
                   onClick={() => setPanel("settings")}
@@ -285,50 +263,6 @@ export function BookitApp() {
               </div>
             </header>
             <main className="library-main">
-              {status === "offline" && (
-                <div className="offline-banner">
-                  <WifiOff size={15} />
-                  You’re offline. Keep writing — we’ll sync later.
-                </div>
-              )}
-              <section className="library-intro">
-                <p className="eyebrow">
-                  <span className="tiny-line" />
-                  {tab === "favorites"
-                    ? "CLOSE TO YOUR HEART"
-                    : tab === "collections"
-                      ? "A PLACE FOR EVERYTHING"
-                      : "YOUR PERSONAL LIBRARY"}
-                </p>
-                <h1>
-                  {tab === "favorites" ? (
-                    <>
-                      The ones you
-                      <br />
-                      <em>come back to.</em>
-                    </>
-                  ) : tab === "collections" ? (
-                    <>
-                      Your thoughts,
-                      <br />
-                      <em>in good company.</em>
-                    </>
-                  ) : (
-                    <>
-                      Every chapter,
-                      <br />
-                      <em>a little more you.</em>
-                    </>
-                  )}
-                </h1>
-                <p className="intro-description">
-                  {tab === "favorites"
-                    ? "Some books feel a little more like home."
-                    : tab === "collections"
-                      ? "Give your books a place to belong."
-                      : "For the thoughts, lessons, and little discoveries."}
-                </p>
-              </section>
               <div className="library-stats">
                 <span>
                   <strong>{library.books.length}</strong> books
@@ -337,22 +271,17 @@ export function BookitApp() {
                 <span>
                   <strong>{totalPages}</strong> pages
                 </span>
-                <span className="stat-divider" />
-                <span className="stat-note">A story only you can tell.</span>
-                <Sparkles size={15} strokeWidth={1.2} />
               </div>
               {tab === "library" && !query && filter === "all" && latestBook && (
                 <section className="continue-section">
                   <div className="section-heading">
-                    <h2>Pick up where you left off</h2>
-                    <span className="section-dot" />
+                    <h2>Continue writing</h2>
                   </div>
                   <button className="continue-card" onClick={() => openBook(latestBook)}>
                     <div className="continue-cover">
                       <BookCover book={latestBook} size="small" />
                     </div>
                     <div className="continue-copy">
-                      <span className="eyebrow">A MOMENT FOR YOU</span>
                       <h3>{latestBook.title.replace(/\n/g, " ")}</h3>
                       <p>{latestBook.subtitle || "Your story is still unfolding."}</p>
                       <span className="continue-cta">
@@ -360,9 +289,6 @@ export function BookitApp() {
                         <ArrowRight size={15} />
                       </span>
                     </div>
-                    <span className="continue-sparkle">
-                      <Sparkles size={22} strokeWidth={1} />
-                    </span>
                   </button>
                 </section>
               )}
@@ -378,7 +304,7 @@ export function BookitApp() {
                     </button>
                   </div>
                   <div className="collections-list">
-                    {library.collections.map((collection, i) => {
+                    {library.collections.map((collection) => {
                       const books = library.books.filter(
                         (book) => book.collectionId === collection.id,
                       );
@@ -391,7 +317,7 @@ export function BookitApp() {
                               setFilter(collection.id);
                             }}
                           >
-                            <span className={`collection-icon tone-${i % 3}`}>
+                            <span className="collection-icon">
                               <Folder size={23} strokeWidth={1.3} />
                             </span>
                             <div>
@@ -426,14 +352,6 @@ export function BookitApp() {
                         }
                       />
                     )}
-                  </div>
-                  <div className="collections-footnote">
-                    <Sparkles size={18} strokeWidth={1.1} />
-                    <p>
-                      A year of reflections. A lifetime of lessons.
-                      <br />
-                      There’s a collection for every chapter.
-                    </p>
                   </div>
                 </section>
               ) : (
@@ -558,54 +476,61 @@ export function BookitApp() {
                       <Plus size={22} strokeWidth={1.5} />
                     </span>
                     <div>
-                      <strong>There’s more to your story</strong>
-                      <span>Create a new book</span>
+                      <strong>Create a new book</strong>
+                      <span>Add to your library</span>
                     </div>
                     <ArrowRight size={19} strokeWidth={1.3} />
                   </button>
                 </section>
               )}
-              <div className="library-signoff">
-                <span />
-                <BookOpen size={16} strokeWidth={1} />
-                <span />
-                <p>EVERY CHAPTER IS YOURS.</p>
-              </div>
             </main>
             <nav className="bottom-nav" aria-label="Main navigation">
-              <button
-                className={tab === "library" ? "active" : ""}
-                onClick={() => {
-                  setTab("library");
-                  setFilter("all");
-                  setQuery("");
-                }}
+              <div
+                className="bottom-tabs"
+                style={
+                  {
+                    "--active-tab": tab === "library" ? 0 : tab === "collections" ? 1 : 2,
+                  } as CSSProperties
+                }
               >
-                <LibraryBig size={21} strokeWidth={1.6} />
-                <span>Library</span>
-              </button>
-              <button
-                className={tab === "collections" ? "active" : ""}
-                onClick={() => {
-                  setTab("collections");
-                  setFilter("all");
-                  setQuery("");
-                }}
-              >
-                <Folder size={21} strokeWidth={1.6} />
-                <span>Collections</span>
-              </button>
-              <button
-                className={tab === "favorites" ? "active" : ""}
-                onClick={() => {
-                  setTab("favorites");
-                  setFilter("all");
-                  setQuery("");
-                }}
-              >
-                <Heart size={21} strokeWidth={1.6} />
-                <span>Favorites</span>
-              </button>
+                <span className="nav-selection" aria-hidden="true" />
+                <button
+                  className={tab === "library" ? "active" : ""}
+                  aria-current={tab === "library" ? "page" : undefined}
+                  onClick={() => {
+                    setTab("library");
+                    setFilter("all");
+                    setQuery("");
+                  }}
+                >
+                  <LibraryBig size={21} strokeWidth={1.6} />
+                  <span>Home</span>
+                </button>
+                <button
+                  className={tab === "collections" ? "active" : ""}
+                  aria-current={tab === "collections" ? "page" : undefined}
+                  onClick={() => {
+                    setTab("collections");
+                    setFilter("all");
+                    setQuery("");
+                  }}
+                >
+                  <Folder size={21} strokeWidth={1.6} />
+                  <span>Collections</span>
+                </button>
+                <button
+                  className={tab === "favorites" ? "active" : ""}
+                  aria-current={tab === "favorites" ? "page" : undefined}
+                  onClick={() => {
+                    setTab("favorites");
+                    setFilter("all");
+                    setQuery("");
+                  }}
+                >
+                  <Heart size={21} strokeWidth={1.6} />
+                  <span>Favorites</span>
+                </button>
+              </div>
               <button
                 className="nav-create"
                 onClick={() => setEditingBook("new")}
@@ -640,35 +565,31 @@ export function BookitApp() {
                 <p>All the little things that make you, you.</p>
               </div>
             </div>
-            <div className="sync-detail">
-              <span className={`sync-dot ${status}`} />
-              <div>
-                <strong>
-                  {status === "saved"
-                    ? "Your library is up to date"
-                    : status === "offline"
-                      ? "Your device is keeping your thoughts safe"
-                      : status === "saving"
-                        ? "Syncing your latest thoughts…"
-                        : "Your sync needs a little attention"}
-                </strong>
-                <p>
-                  {status === "saved"
-                    ? "Saved on this device and in your SQLite library."
-                    : "Changes stay on this device until your server is available."}
-                </p>
-              </div>
-              {(status === "error" || status === "offline") && (
+            <fieldset className="appearance-setting">
+              <legend>Appearance</legend>
+              <div className="appearance-options">
                 <button
-                  className="text-button"
-                  onClick={() => {
-                    void retry();
-                  }}
+                  type="button"
+                  className={`appearance-option${theme === "light" ? " selected" : ""}`}
+                  aria-label="Light mode"
+                  aria-pressed={theme === "light"}
+                  onClick={() => changeTheme("light")}
                 >
-                  Retry
+                  <Sun size={17} strokeWidth={1.7} />
+                  <span>Light</span>
                 </button>
-              )}
-            </div>
+                <button
+                  type="button"
+                  className={`appearance-option${theme === "dark" ? " selected" : ""}`}
+                  aria-label="Dark mode"
+                  aria-pressed={theme === "dark"}
+                  onClick={() => changeTheme("dark")}
+                >
+                  <Moon size={17} strokeWidth={1.7} />
+                  <span>Dark</span>
+                </button>
+              </div>
+            </fieldset>
             <div className="menu-list">
               {!isStandalone && (
                 <button onClick={() => setPanel("install")}>
@@ -698,16 +619,6 @@ export function BookitApp() {
                 <ChevronRight size={16} />
               </button>
             </div>
-            <p className="offline-readiness">
-              <span className={`sync-dot ${offlineSetup === "ready" ? "saved" : "offline"}`} />
-              {offlineSetup === "ready"
-                ? "Ready for offline use"
-                : offlineSetup === "development"
-                  ? "Offline launch is enabled in the production build"
-                  : offlineSetup === "unavailable"
-                    ? "Offline launch needs a supported browser over HTTPS"
-                    : "Preparing offline access…"}
-            </p>
             <p className="settings-footer">
               Bookit · A home for your thoughts.
               <br />
@@ -779,8 +690,7 @@ export function BookitApp() {
                 <BookOpen size={42} strokeWidth={1.2} />
               </div>
               <p className="body-copy">
-                A little space for your thoughts, right on your home screen. Open Bookit once while
-                online, then keep reading and writing offline.
+                A little space for your thoughts, right on your home screen.
               </p>
               {installPrompt ? (
                 <button
@@ -806,10 +716,6 @@ export function BookitApp() {
                     <strong>On Android</strong>
                     <br />
                     Open the browser menu → Install app or Add to Home screen.
-                  </p>
-                  <p className="small-note">
-                    Installation needs HTTPS (or localhost). Offline mode is enabled in the
-                    production build.
                   </p>
                 </div>
               )}
@@ -861,13 +767,13 @@ export function BookitApp() {
         {conflict && (
           <Sheet
             title="Two chapters of your library"
-            eyebrow="SYNC NEEDS YOUR ATTENTION"
-            onClose={() => setNotice("Choose which library to keep so syncing can continue.")}
+            eyebrow="CHOOSE A LIBRARY"
+            onClose={() => setNotice("Choose which version of your library to keep.")}
           >
             <div className="sheet-content">
               <p className="body-copy">
-                Your server library changed while this device had unsynced writing. Choose the
-                version to keep. A backup of the other version will download first.
+                There are two versions of your library. Choose the version to keep. A backup of the
+                other version will download first.
               </p>
               <div className="conflict-choices">
                 <button className="primary-button" onClick={() => resolveConflict("device")}>
@@ -880,7 +786,7 @@ export function BookitApp() {
                     closeBook();
                   }}
                 >
-                  Use the server library
+                  Use the other library
                 </button>
               </div>
             </div>
@@ -888,7 +794,7 @@ export function BookitApp() {
         )}
         {error && (
           <div className="error-notice" role="alert">
-            <CloudOff size={18} />
+            <CircleAlert size={18} />
             <p>{error}</p>
             <button className="icon-button" onClick={clearError} aria-label="Dismiss message">
               <X size={16} />

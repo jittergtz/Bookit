@@ -1,5 +1,5 @@
 /* Bump the version whenever the app shell changes. API data lives in SQLite and the device cache. */
-const CACHE = "bookit-shell-v2";
+const CACHE = "bookit-shell-v7";
 const SHELL = [
   "/",
   "/manifest.webmanifest",

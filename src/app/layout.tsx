@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/dm-sans";
 import "@fontsource-variable/lora";
+import "@fontsource-variable/caveat";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -15,13 +16,21 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#f7f5ef",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              '(function(){try{document.documentElement.dataset.theme=localStorage.getItem("bookit-theme-v1")==="dark"?"dark":"light"}catch{}})()',
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

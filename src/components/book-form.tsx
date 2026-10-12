@@ -4,13 +4,18 @@ import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import {
   coverColors,
+  coverPatterns,
+  getCoverDesign,
+  newDesignElement,
   newId,
   newPage,
   paperColors,
   paperPatterns,
   type Book,
   type Collection,
+  type CoverDesign,
 } from "@/lib/model";
+import { CanvasEditor, ColorField } from "./design-canvas";
 import { BookCover, Sheet } from "./ui";
 
 export function BookForm({
@@ -24,29 +29,75 @@ export function BookForm({
   onSave: (book: Book, newCollection?: Collection) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Book>(
-    () =>
-      book || {
-        id: newId(),
-        title: "",
-        subtitle: "",
-        coverColor: "#68755a",
-        coverStyle: "frame",
-        font: "serif",
-        paperColor: "#faf7ee",
-        paperPattern: "lined",
-        collectionId: null,
-        favorite: false,
-        pages: [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-  );
+  const [draft, setDraft] = useState<Book>(() => {
+    const initial: Book = book
+      ? structuredClone(book)
+      : {
+          id: newId(),
+          title: "",
+          subtitle: "",
+          coverColor: "#171717",
+          coverStyle: "minimal",
+          font: "serif",
+          paperColor: "#ffffff",
+          paperPattern: "lined",
+          collectionId: null,
+          favorite: false,
+          pages: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+    return { ...initial, coverDesign: getCoverDesign(initial) };
+  });
   const [tab, setTab] = useState<"cover" | "paper">("cover");
   const [addingCollection, setAddingCollection] = useState(false);
   const [collectionName, setCollectionName] = useState("");
+  const design = draft.coverDesign!;
   const set = <K extends keyof Book>(key: K, value: Book[K]) =>
     setDraft((previous) => ({ ...previous, [key]: value }));
+  const changeDesign = (patch: Partial<CoverDesign>) =>
+    setDraft((previous) => ({ ...previous, coverDesign: { ...previous.coverDesign!, ...patch } }));
+  const preset = (kind: "blank" | "minimal" | "journal" | "playful") => {
+    const title = newDesignElement({
+      source: "title",
+      color: "#ffffff",
+      y: kind === "journal" ? 42 : 50,
+      fontSize: 40,
+      font: draft.font,
+    });
+    changeDesign({
+      frame: kind === "journal" ? "single" : "none",
+      texture: kind === "journal",
+      pattern: "none",
+      elements:
+        kind === "blank"
+          ? []
+          : kind === "journal"
+            ? [
+                title,
+                newDesignElement({
+                  source: "subtitle",
+                  color: "#ffffff",
+                  y: 66,
+                  fontSize: 14,
+                  font: "sans",
+                }),
+              ]
+            : kind === "playful"
+              ? [
+                  { ...title, y: 38, font: "sans", bold: true },
+                  newDesignElement({
+                    kind: "sticker",
+                    text: "✿",
+                    y: 70,
+                    width: 30,
+                    fontSize: 64,
+                    color: "#ffffff",
+                  }),
+                ]
+              : [title],
+    });
+  };
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.title.trim()) return;
@@ -68,43 +119,32 @@ export function BookForm({
       existing ? undefined : collection,
     );
   };
-
   return (
     <Sheet
-      title={book ? "Make it yours" : "A new chapter"}
-      eyebrow={book ? "CUSTOMIZE YOUR BOOK" : "CREATE A BOOK"}
+      title={book ? "Edit your book" : "Create a book"}
+      eyebrow="MAKE IT YOURS"
       onClose={onClose}
     >
       <form onSubmit={save} className="book-form">
-        <div className="book-preview">
-          <BookCover
-            book={{
-              ...draft,
-              title: draft.title || "Your story",
-              subtitle: draft.subtitle || "Waiting to be written",
-            }}
-            size="preview"
-          />
-          <span>A little preview of your next favorite book.</span>
-        </div>
         <label className="field-label">
-          Book title
+          Book name
           <input
             autoComplete="off"
             placeholder="e.g. Life lessons"
             maxLength={80}
             value={draft.title}
-            onChange={(e) => set("title", e.target.value)}
+            onChange={(event) => set("title", event.target.value)}
             required
           />
         </label>
+        <p className="small-note">Your library name stays visible even with a blank cover.</p>
         <label className="field-label">
-          A few words underneath <span className="optional">optional</span>
+          Subtitle <span className="optional">optional</span>
           <input
-            placeholder="e.g. Things I’m learning along the way"
+            placeholder="A few words about this book"
             maxLength={120}
             value={draft.subtitle}
-            onChange={(e) => set("subtitle", e.target.value)}
+            onChange={(event) => set("subtitle", event.target.value)}
           />
         </label>
         <div className="segmented">
@@ -113,128 +153,236 @@ export function BookForm({
             className={tab === "cover" ? "active" : ""}
             onClick={() => setTab("cover")}
           >
-            The cover
+            Cover studio
           </button>
           <button
             type="button"
             className={tab === "paper" ? "active" : ""}
             onClick={() => setTab("paper")}
           >
-            The paper
+            Default paper
           </button>
         </div>
         {tab === "cover" ? (
           <>
-            <fieldset>
-              <legend>Cover color</legend>
-              <div className="color-options">
-                {coverColors.map((color, index) => (
-                  <button
-                    type="button"
-                    key={color}
-                    style={{ background: color }}
-                    className={`color-swatch ${draft.coverColor === color ? "selected" : ""}`}
-                    aria-label={
-                      [
-                        "Sage",
-                        "Terracotta",
-                        "Slate",
-                        "Honey",
-                        "Plum",
-                        "Charcoal",
-                        "Rose",
-                        "Sea glass",
-                      ][index]
+            <div className="preset-row" aria-label="Cover starting points">
+              <span>Start with</span>
+              {(["blank", "minimal", "journal", "playful"] as const).map((kind) => (
+                <button type="button" key={kind} onClick={() => preset(kind)}>
+                  {kind === "blank" ? "Blank cover" : kind[0].toUpperCase() + kind.slice(1)}
+                </button>
+              ))}
+            </div>
+            <details className="studio-section">
+              <summary>
+                Background <span>Color, gradient & pattern</span>
+              </summary>
+              <div className="studio-settings">
+                <div className="color-options">
+                  {["#171717", "#ffffff", ...coverColors].map((color) => (
+                    <button
+                      type="button"
+                      key={color}
+                      style={{
+                        background: color,
+                        color: color === "#ffffff" ? "#171717" : "#ffffff",
+                      }}
+                      className={`color-swatch ${draft.coverColor === color ? "selected" : ""}`}
+                      aria-label={`Cover color ${color}`}
+                      aria-pressed={draft.coverColor === color}
+                      onClick={() => set("coverColor", color)}
+                    >
+                      {draft.coverColor === color && <Check size={17} />}
+                    </button>
+                  ))}
+                </div>
+                <ColorField
+                  label="Background color"
+                  value={draft.coverColor}
+                  onChange={(color) => set("coverColor", color)}
+                />
+                <div className="choice-row">
+                  {(["solid", "linear", "radial"] as const).map((fill) => (
+                    <button
+                      type="button"
+                      key={fill}
+                      className={`choice ${design.fill === fill ? "selected" : ""}`}
+                      aria-pressed={design.fill === fill}
+                      onClick={() => changeDesign({ fill })}
+                    >
+                      {fill === "solid" ? "Solid" : fill === "linear" ? "Gradient" : "Radial"}
+                    </button>
+                  ))}
+                </div>
+                {design.fill !== "solid" && (
+                  <ColorField
+                    label="Gradient end color"
+                    value={design.gradientColor}
+                    onChange={(gradientColor) => changeDesign({ gradientColor })}
+                  />
+                )}
+                {design.fill === "linear" && (
+                  <label className="range-field">
+                    <span>
+                      Gradient angle <output>{design.gradientAngle}°</output>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="Gradient angle"
+                      min={0}
+                      max={360}
+                      value={design.gradientAngle}
+                      onChange={(event) =>
+                        changeDesign({ gradientAngle: Number(event.target.value) })
+                      }
+                    />
+                  </label>
+                )}
+                <label className="field-label">
+                  Pattern
+                  <select
+                    aria-label="Cover pattern"
+                    value={design.pattern}
+                    onChange={(event) =>
+                      changeDesign({ pattern: event.target.value as CoverDesign["pattern"] })
                     }
-                    aria-pressed={draft.coverColor === color}
-                    onClick={() => set("coverColor", color)}
                   >
-                    {draft.coverColor === color && <Check size={17} />}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset>
-              <legend>Title typeface</legend>
-              <div className="choice-row">
-                {(["serif", "sans"] as const).map((font) => (
-                  <button
-                    type="button"
-                    className={`type-choice font-${font} ${draft.font === font ? "selected" : ""}`}
-                    key={font}
-                    onClick={() => set("font", font)}
-                    aria-pressed={draft.font === font}
+                    {coverPatterns.map((pattern) => (
+                      <option key={pattern} value={pattern}>
+                        {pattern[0].toUpperCase() + pattern.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <ColorField
+                  label="Pattern & frame color"
+                  value={design.patternColor}
+                  onChange={(patternColor) => changeDesign({ patternColor })}
+                />
+                {design.pattern !== "none" && (
+                  <label className="range-field">
+                    <span>
+                      Pattern strength <output>{Math.round(design.patternOpacity * 100)}%</output>
+                    </span>
+                    <input
+                      type="range"
+                      aria-label="Pattern strength"
+                      min={0}
+                      max={100}
+                      value={Math.round(design.patternOpacity * 100)}
+                      onChange={(event) =>
+                        changeDesign({ patternOpacity: Number(event.target.value) / 100 })
+                      }
+                    />
+                  </label>
+                )}
+                <label className="field-label">
+                  Border
+                  <select
+                    aria-label="Cover border"
+                    value={design.frame}
+                    onChange={(event) =>
+                      changeDesign({ frame: event.target.value as CoverDesign["frame"] })
+                    }
                   >
-                    <span>Aa</span>
-                    {font === "serif" ? "Classic serif" : "Modern sans"}
-                  </button>
-                ))}
+                    <option value="none">None</option>
+                    <option value="single">Fine line</option>
+                    <option value="double">Double line</option>
+                  </select>
+                </label>
+                <label className="toggle-field">
+                  <span>Soft cloth texture</span>
+                  <input
+                    type="checkbox"
+                    checked={design.texture}
+                    onChange={(event) => changeDesign({ texture: event.target.checked })}
+                  />
+                </label>
               </div>
-            </fieldset>
-            <fieldset>
-              <legend>Cover style</legend>
-              <div className="choice-row">
-                {(["classic", "minimal", "frame"] as const).map((style) => (
-                  <button
-                    type="button"
-                    key={style}
-                    className={`choice ${draft.coverStyle === style ? "selected" : ""}`}
-                    onClick={() => set("coverStyle", style)}
-                    aria-pressed={draft.coverStyle === style}
-                  >
-                    {style === "frame" ? "Framed" : style === "classic" ? "Classic" : "Minimal"}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            </details>
+            <CanvasEditor
+              elements={design.elements}
+              values={{ title: draft.title, subtitle: draft.subtitle }}
+              defaultColor="#ffffff"
+              defaultFont={draft.font}
+              onSourceChange={(source, value) => set(source, value)}
+              onChange={(elements) => changeDesign({ elements })}
+              renderCanvas={(editor) => (
+                <div className="cover-workspace">
+                  <BookCover book={draft} size="preview" editor={editor} />
+                </div>
+              )}
+            />
           </>
         ) : (
-          <PaperOptions
-            color={draft.paperColor}
-            pattern={draft.paperPattern}
-            onColor={(color) => set("paperColor", color)}
-            onPattern={(pattern) => set("paperPattern", pattern)}
-          />
+          <>
+            <fieldset>
+              <legend>Default page layout</legend>
+              <div className="choice-row">
+                <button
+                  type="button"
+                  className={`choice ${draft.pageLayout !== "canvas" ? "selected" : ""}`}
+                  aria-pressed={draft.pageLayout !== "canvas"}
+                  onClick={() => set("pageLayout", "writing")}
+                >
+                  Normal writing
+                </button>
+                <button
+                  type="button"
+                  className={`choice ${draft.pageLayout === "canvas" ? "selected" : ""}`}
+                  aria-pressed={draft.pageLayout === "canvas"}
+                  onClick={() => set("pageLayout", "canvas")}
+                >
+                  Free layout
+                </button>
+              </div>
+              <p className="small-note">Place text and stickers anywhere with free layout.</p>
+            </fieldset>
+            <PaperOptions
+              color={draft.paperColor}
+              pattern={draft.paperPattern}
+              onColor={(color) => set("paperColor", color)}
+              onPattern={(pattern) => set("paperPattern", pattern)}
+            />
+          </>
         )}
         <fieldset>
-          <legend>Keep it in a collection</legend>
-          <div className="collection-select">
-            <select
-              aria-label="Collection"
-              value={addingCollection ? "new" : draft.collectionId || ""}
-              onChange={(e) => {
-                setAddingCollection(e.target.value === "new");
-                if (e.target.value !== "new") set("collectionId", e.target.value || null);
-              }}
-            >
-              <option value="">No collection</option>
-              {collections.map((collection) => (
-                <option value={collection.id} key={collection.id}>
-                  {collection.name}
-                </option>
-              ))}
-              <option value="new">+ New collection</option>
-            </select>
-          </div>
+          <legend>Collection</legend>
+          <select
+            aria-label="Collection"
+            value={addingCollection ? "new" : draft.collectionId || ""}
+            onChange={(event) => {
+              setAddingCollection(event.target.value === "new");
+              if (event.target.value !== "new") set("collectionId", event.target.value || null);
+            }}
+          >
+            <option value="">No collection</option>
+            {collections.map((collection) => (
+              <option value={collection.id} key={collection.id}>
+                {collection.name}
+              </option>
+            ))}
+            <option value="new">+ New collection</option>
+          </select>
           {addingCollection && (
             <input
               aria-label="New collection name"
               placeholder="Name your collection"
               maxLength={40}
               value={collectionName}
-              onChange={(e) => setCollectionName(e.target.value)}
+              onChange={(event) => setCollectionName(event.target.value)}
               required
             />
           )}
         </fieldset>
         {book && (
           <p className="small-note">
-            Paper choices become the default for new pages. Existing pages keep their own style.
+            Paper choices apply to new pages. Existing pages keep their own style.
           </p>
         )}
         <div className="sheet-footer">
           <button className="primary-button" type="submit">
-            {book ? <Check size={18} /> : <Plus size={18} />}
+            {book ? <Check size={18} /> : <Plus size={18} />}{" "}
             {book ? "Save changes" : "Create my book"}
           </button>
         </div>
@@ -278,6 +426,7 @@ export function PaperOptions({
           ))}
         </div>
       </fieldset>
+      <ColorField label="Custom paper color" value={color} onChange={onColor} />
       <fieldset>
         <legend>Room for your thoughts</legend>
         <div className="paper-options">
