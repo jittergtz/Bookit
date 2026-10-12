@@ -1,0 +1,415 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Ellipsis,
+  Heart,
+  List,
+  Paintbrush,
+  Plus,
+  Quote,
+  Trash2,
+} from "lucide-react";
+import { newPage, wordCount, type Book, type Page } from "@/lib/model";
+import type { SaveStatus } from "@/lib/use-library";
+import { PaperOptions } from "./book-form";
+import { Sheet } from "./ui";
+
+export function BookReader({
+  book,
+  status,
+  onChange,
+  onClose,
+  onCustomize,
+  onDelete,
+}: {
+  book: Book;
+  status: SaveStatus;
+  onChange: (book: Book) => void;
+  onClose: () => void;
+  onCustomize: () => void;
+  onDelete: () => void;
+}) {
+  const [index, setIndex] = useState(() => {
+    try {
+      return Math.min(
+        Math.max(Number(localStorage.getItem(`bookit-position-${book.id}`)) || 0, 0),
+        book.pages.length - 1,
+      );
+    } catch {
+      return 0;
+    }
+  });
+  const [panel, setPanel] = useState<
+    "style" | "contents" | "menu" | "delete-page" | "delete-book" | null
+  >(null);
+  const [direction, setDirection] = useState("next");
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const gesture = useRef<{ x: number; y: number; editing: boolean } | null>(null);
+  const page = book.pages[Math.min(index, book.pages.length - 1)];
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`bookit-position-${book.id}`, String(index));
+    } catch {
+      /* Position is optional. */
+    }
+  }, [book.id, index]);
+  useEffect(() => {
+    const field = textarea.current;
+    if (field) {
+      field.style.height = "auto";
+      field.style.height = `${Math.max(field.scrollHeight, 300)}px`;
+    }
+  }, [page.content, page.id]);
+
+  const editPage = (patch: Partial<Page>) => {
+    const now = new Date().toISOString();
+    onChange({
+      ...book,
+      updatedAt: now,
+      pages: book.pages.map((item) =>
+        item.id === page.id ? { ...item, ...patch, updatedAt: now } : item,
+      ),
+    });
+  };
+  const navigate = (next: number) => {
+    if (next < 0 || next >= book.pages.length) return;
+    setDirection(next > index ? "next" : "previous");
+    setIndex(next);
+    textarea.current?.blur();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const addPage = () => {
+    const next = newPage(book);
+    onChange({ ...book, updatedAt: new Date().toISOString(), pages: [...book.pages, next] });
+    setDirection("next");
+    setIndex(book.pages.length);
+    setPanel(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const insertQuote = () => {
+    const field = textarea.current;
+    const start = field?.selectionStart ?? page.content.length;
+    const end = field?.selectionEnd ?? start;
+    const selection = page.content.slice(start, end);
+    const text = `“${selection || "Your quote here"}”\n— `;
+    editPage({ content: page.content.slice(0, start) + text + page.content.slice(end) });
+    requestAnimationFrame(() => {
+      field?.focus();
+      field?.setSelectionRange(start + 1, start + 1 + (selection.length || 15));
+    });
+  };
+
+  return (
+    <div className="reader">
+      <header className="reader-header">
+        <button className="icon-button" onClick={onClose} aria-label="Back to library">
+          <ArrowLeft size={22} />
+        </button>
+        <div>
+          <span className="eyebrow">YOUR BOOK</span>
+          <h1>{book.title.replace(/\n/g, " ")}</h1>
+        </div>
+        <button className="icon-button" onClick={() => setPanel("menu")} aria-label="Book options">
+          <Ellipsis size={23} />
+        </button>
+      </header>
+      <div className="reading-progress">
+        <span
+          style={{
+            width: `${((index + 1) / book.pages.length) * 100}%`,
+            background: book.coverColor,
+          }}
+        />
+      </div>
+      <div className="reader-meta">
+        <button className="text-button" onClick={() => setPanel("style")}>
+          <Paintbrush size={14} />
+          Page style
+          <ChevronDown size={12} />
+        </button>
+        <span className={`save-state ${status}`} aria-live="polite">
+          <span />
+          {status === "saved"
+            ? "All changes saved"
+            : status === "saving"
+              ? "Saving…"
+              : status === "offline"
+                ? "Saved on device"
+                : status === "conflict"
+                  ? "Sync needs attention"
+                  : "Saved on device · retry sync"}
+        </span>
+      </div>
+      <main
+        className="reader-paper-wrap"
+        onTouchStart={(event) => {
+          const touch = event.touches[0];
+          gesture.current = {
+            x: touch.clientX,
+            y: touch.clientY,
+            editing:
+              document.activeElement === event.target &&
+              (event.target instanceof HTMLTextAreaElement ||
+                event.target instanceof HTMLInputElement),
+          };
+        }}
+        onTouchEnd={(event) => {
+          const start = gesture.current;
+          gesture.current = null;
+          if (!start || start.editing) return;
+          const end = event.changedTouches[0];
+          const dx = end.clientX - start.x;
+          if (Math.abs(dx) > 65 && Math.abs(end.clientY - start.y) < Math.abs(dx) * 0.55)
+            navigate(index + (dx < 0 ? 1 : -1));
+        }}
+      >
+        <article
+          key={page.id}
+          className={`reader-paper paper-${page.paperPattern} font-${page.font} turn-${direction}`}
+          style={{ backgroundColor: page.paperColor }}
+        >
+          <div className="paper-top">
+            <span>
+              {new Date(page.createdAt).toLocaleDateString("en", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </span>
+            <span className="paper-number">{String(index + 1).padStart(2, "0")}</span>
+          </div>
+          <input
+            className="page-title"
+            value={page.title}
+            maxLength={160}
+            onChange={(event) => editPage({ title: event.target.value })}
+            placeholder="Give this page a title…"
+            aria-label="Page title"
+          />
+          <div className="page-writing">
+            <textarea
+              ref={textarea}
+              className="page-content"
+              value={page.content}
+              maxLength={100000}
+              onChange={(event) => editPage({ content: event.target.value })}
+              placeholder="A thought, a little lesson, a moment worth keeping. Start anywhere…"
+              aria-label="Page content"
+              spellCheck
+            />
+          </div>
+          <div className="paper-bottom">
+            <span>
+              {wordCount(page.content)} {wordCount(page.content) === 1 ? "word" : "words"}
+            </span>
+            <BookOpen size={15} strokeWidth={1} />
+            <span>BOOKIT</span>
+          </div>
+        </article>
+      </main>
+      <div className="reader-tools">
+        <button className="text-button" onClick={insertQuote}>
+          <Quote size={16} />
+          Add a quote
+        </button>
+        <span>Make room for a thought.</span>
+      </div>
+      <footer className="reader-navigation">
+        <button
+          className="icon-button"
+          onClick={() => navigate(index - 1)}
+          disabled={index === 0}
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <button className="page-counter" onClick={() => setPanel("contents")}>
+          Page {Math.min(index + 1, book.pages.length)} <span>of {book.pages.length}</span>
+          <ChevronDown size={14} />
+        </button>
+        {index === book.pages.length - 1 ? (
+          <button
+            className="icon-button add-page-button"
+            onClick={addPage}
+            disabled={book.pages.length >= 500}
+            aria-label="Add page"
+          >
+            <Plus size={22} />
+          </button>
+        ) : (
+          <button
+            className="icon-button"
+            onClick={() => navigate(index + 1)}
+            aria-label="Next page"
+          >
+            <ChevronRight size={22} />
+          </button>
+        )}
+      </footer>
+      <p className="swipe-hint">Swipe the page to turn. Your thoughts stay right here.</p>
+
+      {panel === "style" && (
+        <Sheet
+          title="Your page, your way"
+          eyebrow={`PAGE ${index + 1}`}
+          onClose={() => setPanel(null)}
+        >
+          <div className="sheet-content">
+            <PaperOptions
+              color={page.paperColor}
+              pattern={page.paperPattern}
+              onColor={(paperColor) => editPage({ paperColor })}
+              onPattern={(paperPattern) => editPage({ paperPattern })}
+            />
+            <fieldset>
+              <legend>Writing typeface</legend>
+              <div className="choice-row">
+                {(["serif", "sans"] as const).map((font) => (
+                  <button
+                    className={`type-choice font-${font} ${page.font === font ? "selected" : ""}`}
+                    key={font}
+                    onClick={() => editPage({ font })}
+                    aria-pressed={page.font === font}
+                  >
+                    <span>Aa</span>
+                    {font === "serif" ? "Classic serif" : "Modern sans"}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <button
+              className="danger-link"
+              onClick={() => setPanel("delete-page")}
+              disabled={book.pages.length === 1}
+            >
+              <Trash2 size={15} />
+              Delete this page
+            </button>
+            {book.pages.length === 1 && (
+              <p className="small-note">Every book needs at least one page.</p>
+            )}
+            <div className="sheet-footer">
+              <button className="primary-button" onClick={() => setPanel(null)}>
+                <Check size={18} />
+                Looks good
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+      {panel === "contents" && (
+        <Sheet title="Between the covers" eyebrow="YOUR PAGES" onClose={() => setPanel(null)}>
+          <div className="contents-list">
+            {book.pages.map((item, pageIndex) => (
+              <button
+                key={item.id}
+                className={pageIndex === index ? "active" : ""}
+                onClick={() => {
+                  navigate(pageIndex);
+                  setPanel(null);
+                }}
+              >
+                <span className="contents-number">{String(pageIndex + 1).padStart(2, "0")}</span>
+                <div>
+                  <strong>{item.title || "An unwritten chapter"}</strong>
+                  <p>{item.content.slice(0, 70) || "Room for something good."}</p>
+                </div>
+                <ArrowRight size={16} />
+              </button>
+            ))}
+            <button className="contents-add" onClick={addPage} disabled={book.pages.length >= 500}>
+              <Plus size={20} />
+              <strong>Add a fresh page</strong>
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {panel === "menu" && (
+        <Sheet
+          title={book.title.replace(/\n/g, " ")}
+          eyebrow="BOOK DETAILS"
+          onClose={() => setPanel(null)}
+        >
+          <div className="menu-list">
+            <button
+              onClick={() => {
+                setPanel(null);
+                onCustomize();
+              }}
+            >
+              <Paintbrush size={19} />
+              <span>Customize this book</span>
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={() => {
+                onChange({ ...book, favorite: !book.favorite });
+                setPanel(null);
+              }}
+            >
+              <Heart size={19} fill={book.favorite ? "currentColor" : "none"} />
+              <span>{book.favorite ? "Remove from favorites" : "Keep in favorites"}</span>
+              <ChevronRight size={16} />
+            </button>
+            <button onClick={() => setPanel("contents")}>
+              <List size={19} />
+              <span>All pages</span>
+              <ChevronRight size={16} />
+            </button>
+            <button className="danger" onClick={() => setPanel("delete-book")}>
+              <Trash2 size={19} />
+              <span>Delete book</span>
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </Sheet>
+      )}
+      {(panel === "delete-page" || panel === "delete-book") && (
+        <Sheet
+          title={panel === "delete-book" ? "Close this chapter?" : "Remove this page?"}
+          onClose={() => setPanel(null)}
+        >
+          <div className="sheet-content">
+            <p className="body-copy">
+              {panel === "delete-book"
+                ? "This will delete the book and all its pages. You can export a backup from library settings before deleting it."
+                : "This page and its writing will be permanently removed from your book."}
+            </p>
+            <div className="confirm-actions">
+              <button className="secondary-button" onClick={() => setPanel(null)}>
+                Keep it
+              </button>
+              <button
+                className="danger-button"
+                onClick={() => {
+                  if (panel === "delete-book") onDelete();
+                  else {
+                    onChange({
+                      ...book,
+                      updatedAt: new Date().toISOString(),
+                      pages: book.pages.filter((p) => p.id !== page.id),
+                    });
+                    setIndex(Math.max(0, index - 1));
+                    setPanel(null);
+                  }
+                }}
+              >
+                <Trash2 size={16} />
+                Delete {panel === "delete-book" ? "book" : "page"}
+              </button>
+            </div>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
