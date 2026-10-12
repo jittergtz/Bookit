@@ -38,9 +38,7 @@ export function useLibrary() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
     } catch {
-      setError(
-        "Device storage is full. Keep Bookit open until your changes sync, or export a backup.",
-      );
+      setError("Device storage is full. Export a backup and free space before adding more.");
     }
   }, []);
 
@@ -82,8 +80,10 @@ export function useLibrary() {
           setStatus("conflict");
           return;
         }
-        if (!response.ok)
-          throw new Error(data.error || "Sync failed. Your draft is kept on this device.");
+        if (!response.ok) {
+          setStatus("offline");
+          return;
+        }
         const latest = current.current!;
         if (!draft.dirty) {
           if (latest.dirty && latest.revision !== data.revision) {
@@ -110,18 +110,9 @@ export function useLibrary() {
           setStatus(latest.generation === draft.generation ? "saved" : "saving");
         }
         setError("");
-      } catch (cause) {
+      } catch {
         if (!alive.current) return;
-        if (cause instanceof TypeError || cause instanceof DOMException) {
-          setStatus("offline");
-          return;
-        }
-        setStatus(navigator.onLine ? "error" : "offline");
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Sync is unavailable. Your draft is saved on this device.",
-        );
+        setStatus("offline");
       } finally {
         syncing.current = false;
       }
@@ -156,7 +147,7 @@ export function useLibrary() {
           cache: "no-store",
           signal: AbortSignal.timeout(12_000),
         });
-        if (!response.ok) throw new Error("Your server is unavailable.");
+        if (!response.ok) throw new Error("The local SQLite database is unavailable.");
         const remote: Snapshot = await response.json();
         remote.library = librarySchema.parse(remote.library);
         if (!alive.current) return;
@@ -182,9 +173,6 @@ export function useLibrary() {
             dirty: false,
             generation: 0,
           });
-          setError(
-            "Connect to your Bookit server to load your library. You can still start a book here.",
-          );
         }
         setStatus("offline");
       } finally {
